@@ -1,0 +1,145 @@
+📖 RESSOURCES POUR RÉDIGER TON INTRODUCTION GÉNÉRALE
+TFC — Remédiation automatisée via Python & SNMPv3
+
+Comment utiliser ce guide : Pour chaque section de ton introduction, tu trouveras les ressources à citer, des données chiffrées prêtes à l'emploi, et un exemple de formulation pour t'aider à rédiger.
+
+
+✍️ SECTION 1 — Contexte général : cybersécurité des réseaux académiques ouverts
+📌 Idée centrale à développer
+Les réseaux académiques sont structurellement ouverts (liberté académique, diversité des utilisateurs, multi-équipements) et constituent des cibles privilégiées, mais sous-protégées.
+📊 Données chiffrées à utiliser dans ton texte
+
+Les cyberattaques ciblant le secteur éducatif ont augmenté de 75% entre 2020 et 2021, classant l'enseignement supérieur au sixième rang des secteurs les plus ciblés entre 2018 et 2022. MDPI
+Le secteur de l'enseignement supérieur a subi une augmentation de 69% des attaques ransomware entre 2024 et 2025, avec une perte moyenne de 12,6 jours d'activité en 2023 due aux perturbations liées aux ransomwares. SentinelOne
+En 2023, les violations de données dans le secteur éducatif ont coûté en moyenne 3,7 millions USD, et il faut en moyenne 4,8 mois aux établissements pour divulguer publiquement une brèche après un incident ransomware. SentinelOne
+
+📚 Sources à citer
+Réf.SourceTypeLien[CTX1]"Securing higher education against cyberthreats" — Tandfonline 2021Article académique (revue indexée)https://www.tandfonline.com/doi/full/10.1080/23738871.2021.1973526[CTX2]"Analysing Cyber Attacks in the University Sector" — MDPI Computers 2025Article scientifique (MDPI)https://www.mdpi.com/2073-431X/14/2/49[CTX3]"Analysis of Network Vulnerabilities in Kenyan Public University Networks" — Science Publishing Group 2025Article académique Afriquehttps://www.sciencepublishinggroup.com/article/10.11648/j.iotcc.20251302.12[CTX4]"Institutional Strategies for Cybersecurity in Higher Education" — MDPI 2022Article de revuehttps://www.mdpi.com/2078-2489/13/4/192
+
+💡 Note spéciale : La source [CTX3] est particulièrement pertinente car elle porte sur les universités africaines (contexte kenyan), ce qui est beaucoup plus proche du contexte de l'ULC-ICAM que des études américaines ou européennes. Mets-la en avant.
+
+✏️ Exemple de formulation pour ton introduction
+
+« Les réseaux académiques constituent des environnements particulièrement vulnérables aux incidents de sécurité. Conçus pour favoriser l'ouverture, la collaboration et le partage des ressources, ils exposent par nature une surface d'attaque étendue [CTX1]. Cette réalité est confirmée par les statistiques récentes : les cyberattaques ciblant l'enseignement supérieur ont augmenté de 75% entre 2020 et 2021 [CTX4], avec des conséquences financières considérables. Dans les pays africains, des études empiriques menées sur des réseaux universitaires similaires révèlent une prédominance d'attaques automatisées de type sondage et exploitation de ports exposés [CTX3]. L'Université de Lomé-Calavi et l'ICAM ne sont pas à l'abri de ces menaces. »
+
+
+✍️ SECTION 2 — Problématique de la détection et gestion des incidents réseau
+📌 Idée centrale à développer
+La détection tardive et la réponse lente aux incidents réseau amplifient les dommages. La gestion manuelle crée des angles morts, surtout dans les institutions avec peu de ressources humaines spécialisées.
+📊 Données chiffrées
+
+Selon le rapport IBM Cost of a Data Breach 2024, les violations de données coûtent en moyenne 4,88 millions USD au niveau mondial, avec un temps moyen de 277 jours pour identifier et contenir une brèche. SubIT
+Les universités sont des cibles de choix car elles détiennent de grandes quantités de données financières, de recherche et personnelles. Elles font face à une menace interne unique venant des étudiants qui, comme le personnel, peuvent manquer de formation adéquate en cybersécurité tout en ayant accès à des systèmes sensibles. MDPI
+
+📚 Sources à citer
+Réf.SourceType[PROB1]NIST SP 800-61 Rev.2 — Computer Security Incident Handling GuideNorme officielle NIST[PROB2]ISO/IEC 27035:2023 — Information Security Incident ManagementNorme ISO[PROB3]"Analysing Cyber Attacks in the University Sector" — MDPI 2025Article scientifique[PROB4]IBM Cost of a Data Breach Report 2024Rapport industriel cité académiquement
+
+💡 NIST SP 800-61 est téléchargeable gratuitement ici : https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf — C'est LA référence mondiale sur la gestion des incidents. Tu dois absolument la citer dans cette section.
+
+
+✍️ SECTION 3 — Limites de la remédiation manuelle
+📌 Trois arguments à développer (un paragraphe chacun)
+Argument A — La latence :
+L'administrateur réseau doit d'abord être alerté, puis se connecter, diagnostiquer et agir. Ce délai est incompressible humainement, mais critique techniquement.
+Argument B — Les erreurs humaines :
+Sous pression, en dehors des heures de travail, ou face à des incidents simultanés, l'administrateur prend des risques d'erreur de manipulation.
+Argument C — L'indisponibilité :
+Un réseau académique peut être victime d'un incident à 2h du matin ou le week-end. L'administrateur humain n'est pas disponible en permanence.
+📊 Données chiffrées
+
+En 2023, le temps médian entre la compromission d'un système et l'exfiltration de données est tombé à seulement deux jours, contre neuf jours en 2021. Dans environ 45% des cas, les attaquants ont exfiltré les données en moins d'une journée après la compromission. Palo Alto Networks
+Selon le rapport IBM 2024, les violations détectées après plus de 200 jours coûtent en moyenne 5,46 millions USD, significativement plus que celles détectées avant ce seuil. Fidelis Security
+
+📚 Sources
+Réf.SourceType[LIM1]Unit 42 Incident Response Report 2024 — Palo Alto NetworksRapport technique de référence[LIM2]IBM Cost of a Data Breach 2024Rapport industriel[LIM3]NIST SP 800-61 Rev.2Norme — section sur les délais de réponse[LIM4]IoTEdu paper (arXiv 2024)Article académique — mesure du temps détection→action
+
+✍️ SECTION 4 — Rôle de l'automatisation dans la réduction du dwell time
+📌 Idée centrale à développer
+Le dwell time (temps de séjour d'un attaquant dans un système non détecté) est l'indicateur clé qui justifie l'automatisation. Réduire ce temps via la détection et la réponse automatiques est l'objectif stratégique de ton TFC.
+📊 Définition + données à utiliser
+
+Le dwell time désigne la durée pendant laquelle un acteur malveillant dispose d'un accès non détecté à un système compromis. Plus ce temps est long, plus l'attaquant a l'opportunité de causer des dommages, voler des informations sensibles et propager des logiciels malveillants dans le réseau. ConnectWise
+Selon le rapport M-Trends 2024 de Mandiant, le dwell time médian mondial est passé de 16 jours en 2022 à 10 jours en 2023, démontrant que les efforts d'amélioration de la détection et de la réponse commencent à porter leurs fruits. SubIT
+Selon les recherches de Sophos, le dwell time médian au premier semestre 2023 était de 8 jours, avec une réduction particulièrement marquée pour les attaques ransomware, passées de 9 jours en 2022 à 5 jours. Infosecurity Magazine
+Les processus de sécurité manuels augmentent les temps de réponse, laissant les attaquants persister plus longtemps. Les solutions de sécurité automatisées peuvent accélérer la neutralisation des menaces via des analyses pilotées par l'intelligence artificielle et des actions de réponse orchestrées comme l'isolation des systèmes infectés. Fidelis Security
+
+📚 Sources
+Réf.SourceTypeLien[DT1]Mandiant M-Trends 2024 ReportRapport industriel de référence mondialehttps://www.mandiant.com/m-trends[DT2]Sophos Active Adversary Report 2023Rapport techniquehttps://news.sophos.com/en-us/2023/08/16/active-adversary-report-2023/[DT3]"Dwell Time in Cybersecurity: A Deep Dive" — Plurilock 2023Article techniquehttps://plurilock.com/deep-dive/dwell-time/[DT4]IoTEdu arXiv 2024Article académiquehttps://arxiv.org/pdf/2512.09934
+
+💡 Astuce rédactionnelle : C'est dans cette section que tu fais le lien logique entre le problème (dwell time élevé) et ta solution (automatisation via Python+SNMPv3). La phrase-charnière ressemblera à : « Face à ces délais incompressibles dans la remédiation manuelle, l'automatisation de la détection et de la réponse aux incidents apparaît comme la stratégie la plus efficace pour réduire le dwell time dans les environnements académiques contraints en ressources humaines. »
+
+
+✍️ SECTION 5 — Justification du choix technologique : Python et SNMPv3
+📌 Deux justifications à articuler
+Pourquoi SNMPv3 ?
+
+Standard universel de supervision réseau (RFC IETF)
+Sécurisé (USM : authentification SHA + chiffrement AES)
+Natif sur tous les équipements réseau managés
+Permet la lecture d'état (GET) ET les actions correctives (SET) via le réseau
+
+Pourquoi Python ?
+
+Langage dominant en automatisation réseau (NetDevOps)
+Bibliothèques matures : PySNMP, Netmiko, Paramiko
+Syntaxe accessible pour un niveau intermédiaire
+Communauté active, documentation abondante
+
+📚 Sources à citer
+Réf.SourceArgument appuyé[TECH1]RFC 3410 (IETF)Justification normative SNMPv3[TECH2]RFC 3414 — USM SNMPv3Sécurité SNMPv3 (SHA+AES)[TECH3]"The Critical Role of SNMP in Network Security" — Preprints 2023SNMPv3 vs v1/v2c[TECH4]PySNMP v7.1 DocumentationJustification Python+PySNMP[TECH5]Scientific Reports 2025 (Nornir/Python)Efficacité mesurée de Python en automatisation réseau[TECH6]Stack Overflow Developer Survey 2024Python = top 3 langages en ingénierie réseau
+
+✍️ SECTION 6 — Problématique centrale et questions de recherche
+📌 Structure recommandée
+Problématique centrale (1 paragraphe) :
+
+« Dans un réseau académique ouvert comme celui de l'ULC-ICAM, les incidents réseau courants (boucles STP, port flapping, conflits ARP, saturation) sont détectés tardivement et corrigés manuellement, entraînant une indisponibilité prolongée des services. Comment concevoir et implémenter un système automatisé de détection et de remédiation de base, exploitant Python et SNMPv3 dans un environnement simulé avec EVE-NG, permettant de réduire significativement le temps de réaction aux incidents ? »
+
+Questions de recherche (3 questions) :
+
+Quels types d'incidents réseau dans un contexte académique africain sont les plus fréquents et les plus remédiabiables automatiquement par SNMP ?
+Comment Python et SNMPv3 peuvent-ils être combinés pour détecter et corriger automatiquement ces incidents tout en respectant les contraintes de sécurité ?
+Dans quelle mesure l'automatisation proposée réduit-elle le temps de réaction par rapport à la remédiation manuelle dans un environnement simulé ?
+
+
+✍️ SECTION 7 — Hypothèses de travail
+📌 Structure académique (3 hypothèses)
+#HypothèseVérifiable ?H1L'utilisation de SNMPv3 avec PySNMP permet de détecter automatiquement les incidents réseau ciblés (interface down, port flapping, boucle STP, conflit ARP) dans un délai inférieur à 60 secondes.✅ Mesurable en laboH2Un système de remédiation automatisée basé sur Python réduit le temps moyen de correction des incidents d'au moins 70% par rapport à une intervention manuelle.✅ Mesurable en comparaisonH3La solution proposée est déployable dans un environnement réseau académique hétérogène sans impact négatif significatif sur la disponibilité du réseau (mode dry-run + rollback).✅ Testable via scénarios
+
+✍️ SECTION 8 — Objectif général et objectifs spécifiques
+📌 Structure recommandée
+Objectif général :
+
+« Concevoir, implémenter et évaluer un système automatisé de remédiation de base des incidents réseau, utilisant Python et SNMPv3 dans un environnement simulé EVE-NG, afin de réduire le temps de réaction et minimiser l'intervention humaine dans la gestion des incidents du réseau académique de l'ULC-ICAM. »
+
+Objectifs spécifiques (5 OS alignés avec tes chapitres) :
+OSLibelléChapitreOS1Analyser les incidents réseau récurrents dans le contexte académique et identifier les actions de remédiation automatisables via SNMPCh. I & IIOS2Concevoir l'architecture logicielle du système de détection-décision-remédiation et sa logique décisionnelleCh. IIIOS3Implémenter les modules Python de supervision SNMPv3 et de remédiation automatique dans EVE-NGCh. IVOS4Évaluer la performance du système sur des scénarios d'incidents simulés (métriques : temps de réaction, taux de succès, faux positifs)Ch. VOS5Comparer la remédiation automatisée à la remédiation manuelle et formuler des recommandations pour le réseau de l'ULC-ICAMCh. V & Conclusion
+
+✍️ SECTION 9 — Méthodologie générale
+📌 Les 4 phases à décrire
+PHASE 1 : ANALYSE          PHASE 2 : CONCEPTION
+─────────────────          ────────────────────
+- Revue littérature   →    • Architecture système
+- État de l'art            • Diagrammes UML
+- Étude terrain            • Catalogue remédiation
+- Spec. besoins            • Logique décisionnelle
+
+PHASE 3 : IMPLÉMENTATION   PHASE 4 : EXPÉRIMENTATION
+────────────────────────   ─────────────────────────
+- Env. EVE-NG         →    • Scénarios incidents
+- Scripts Python           • Métriques mesurées
+- Config. SNMPv3           • Comparaison manuelle
+- Tests unitaires          • Analyse résultats
+📚 Sources pour appuyer ta méthodologie
+Réf.SourceUtilité[METH1]NIST SP 800-115 — Technical Guide to Security TestingProtocole expérimental scientifique[METH2]"Design Science Research Methodology (DSRM)" — Peffers et al.Méthodologie académique en informatique[METH3]IoTEdu arXiv 2024Exemple de protocole expérimental similaire
+
+💡 Sur la méthodologie Agile (mentionnée dans ton plan, Chapitre IV) : cite également la méthode Scrum ou Kanban comme cadre de développement itératif. La référence académique standard est : Schwaber, K. & Sutherland, J. (2020). The Scrum Guide. scrum.org.
+
+
+✍️ SECTION 10 — Organisation du mémoire
+📌 Formulation type (à adapter)
+
+« Le présent mémoire s'articule en cinq chapitres. Le premier chapitre pose les fondements théoriques et l'état de l'art sur la cybersécurité des réseaux académiques, le protocole SNMPv3 et l'automatisation réseau avec Python. Le deuxième chapitre présente le réseau de l'ULC-ICAM, analyse les incidents récurrents et formalise les besoins fonctionnels et non fonctionnels. Le troisième chapitre expose la conception de la solution : architecture globale, modélisation UML, catalogue des actions de remédiation et logique décisionnelle. Le quatrième chapitre détaille l'implémentation dans l'environnement de simulation EVE-NG et la configuration SNMPv3. Enfin, le cinquième chapitre présente les expérimentations conduites, les métriques mesurées et la comparaison entre remédiation manuelle et automatisée. Une conclusion générale synthétise les contributions et ouvre des perspectives. »
+
+
+🗂️ RÉCAPITULATIF FINAL — Toutes les sources par section
+SectionSources clés1. ContexteCTX1 (Tandfonline), CTX2 (MDPI), CTX3 (Afrique), CTX42. ProblématiquePROB1 (NIST 800-61), PROB2 (ISO 27035), PROB3, IBM 20243. Limites manuellesLIM1 (Unit 42), LIM2 (IBM), LIM3 (NIST), IoTEdu4. Dwell timeDT1 (Mandiant), DT2 (Sophos), DT3, DT4 (IoTEdu)5. Choix technoRFC 3410, RFC 3414, PySNMP docs, Scientific Reports 20256-8. Prob/Hyp/ObjTes propres formulations appuyées par les sources ci-dessus9. MéthodologieNIST SP 800-115, DSRM, IoTEdu, Scrum Guide

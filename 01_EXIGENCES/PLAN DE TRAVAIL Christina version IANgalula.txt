@@ -1,0 +1,172 @@
+﻿PLAN DE TRAVAIL GLOBAL 
+Automatisation de la remédiation de base du réseau après détection d’incidents de 
+sécurité à l’aide de Python et SNMPv3 : cas du réseau académique de l’ULC-ICAM 
+ÉLÉMENTS PRÉLIMINAIRES 
+• Page de garde 
+• Dédicace 
+• Remerciements 
+• Résumé (Français) + Mots-clés 
+• Abstract (English) + Keywords 
+• Table des matières 
+• Liste des sigles et abréviations 
+• Liste des figures et tableaux 
+INTRODUCTION GÉNÉRALE 
+• Contexte général : cybersécurité des réseaux académiques ouverts 
+• Problématique de la détection et de la gestion des incidents réseau 
+• Limites de la remédiation manuelle (latence, erreurs humaines, indisponibilité) 
+• Rôle de l’automatisation dans la réduction du dwell time 
+• Justification du choix technologique : Python et SNMPv3 
+• Problématique centrale et questions de recherche 
+• Hypothèses de travail 
+• Objectif général 
+• Objectifs spécifiques 
+• Méthodologie générale (analyse – conception – implémentation – expérimentation) 
+• Organisation du mémoire 
+CHAPITRE I — CADRE THÉORIQUE ET ÉTAT DE L’ART 
+Objectif : établir les fondements conceptuels et techniques 
+1.1 Architecture et fonctionnement des réseaux académiques 
+• LAN, VLAN, Wi-Fi, équipements actifs 
+• Services critiques (authentification, Internet, plateformes pédagogiques) 
+1.2 Sécurité réseau et gestion des incidents 
+• Principes de sécurité (CIA, Zero Trust – niveau conceptuel) 
+• Détection, réponse et remédiation : différences et complémentarité 
+1.3 Typologie des incidents réseau en milieu académique 
+• Tempêtes broadcast 
+• Propagation de malwares 
+• Scan interne et usurpation 
+• Port flapping, saturation de liens, interfaces down 
+1.4 Le protocole SNMP 
+• Architecture (Manager, Agent, MIB, OID) 
+• Opérations SNMP : GET, SET, TRAP, INFORM 
+• Avantages et limites pour la supervision et la remédiation 
+1.5 SNMPv3 et la sécurité 
+• Modèle USM 
+• Authentification et confidentialité (authPriv) 
+• Contrôle d’accès et bonnes pratiques 
+1.6 Python pour l’automatisation réseau 
+• Python en NetDevOps 
+• Bibliothèques : PySNMP, easysnmp (option Netmiko/SSH si nécessaire) 
+• Avantages de Python pour les scripts de remédiation 
+1.7 Solutions existantes et positionnement de la recherche 
+• Outils NMS (Nagios, Zabbix, LibreNMS…) 
+• Scripts et orchestrateurs réseau 
+• Limites des solutions existantes en contexte académique 
+• Justification de la solution proposée 
+CHAPITRE II — ÉTUDE DE L’EXISTANT À L’ULC-ICAM ET ANALYSE DES BESOINS 
+Objectif : comprendre le terrain réel et formaliser les exigences 
+2.1 Présentation du réseau académique ULC-ICAM 
+• Topologie logique et physique 
+• Équipements (switches, routeurs, points d’accès) 
+• Segmentation et services 
+2.2 Dispositifs actuels de surveillance et de détection 
+• SNMP polling et traps 
+• Journaux système (logs, syslog) 
+• Limites observées 
+2.3 Processus actuel de remédiation 
+• Rôles des administrateurs 
+• Étapes d’intervention 
+• Temps moyens de réaction 
+2.4 Diagnostic et insuffisances identifiées 
+• Incidents récurrents 
+• Absence d’automatisation 
+• Manque de traçabilité et de standardisation 
+2.5 Spécification des besoins 
+Besoins fonctionnels 
+• Déclenchement automatique après incident 
+• Identification de la cible (IP/MAC → port) 
+• Exécution d’actions correctives 
+• Journalisation et notification 
+Besoins non fonctionnels 
+• Sécurité, fiabilité, maintenabilité 
+• Non-intrusivité et contrôle du risque 
+Contraintes 
+• Hétérogénéité des équipements 
+• Droits d’accès, budget, disponibilité 
+CHAPITRE III — CONCEPTION DE LA SOLUTION DE REMÉDIATION AUTOMATISÉE 
+Chapitre central d’ingénierie 
+3.1 Architecture globale de la solution 
+• Chaîne : Détection → Analyse → Décision → Action → Audit 
+• Interactions Python ↔ SNMPv3 
+3.2 Modélisation du système 
+• Diagrammes de cas d’utilisation 
+• Diagramme de séquence (incident → remédiation) 
+• Diagramme d’activité (workflow automatisé) 
+3.3 Catalogue des actions de remédiation de base 
+• Coupure ou réactivation d’interface 
+• Mise en quarantaine via VLAN 
+• Alerte et escalade humaine 
+3.4 Logique décisionnelle et gestion du risque 
+• Critères : gravité, type d’incident, contexte 
+• Seuils, temporisations, anti-boucle 
+• Cas d’automatisation vs intervention humaine 
+3.5 Module d’identification IP/MAC → port 
+• Tables ARP 
+• Bridge MIB / IF-MIB 
+• Modèle de données (JSON/CSV/SQLite) 
+3.6 Sécurisation de la solution 
+• SNMPv3, ACL, gestion des secrets 
+• Journalisation et audit 
+• Mode dry-run et rollback 
+CHAPITRE IV — RÉALISATION, INTÉGRATION ET DÉPLOIEMENT 
+Chapitre pratique principal 
+4.1 Environnement de développement et de test 
+• Python et bibliothèques 
+• Simulateurs réseau (GNS3/EVE-NG) ou équipements réels 
+4.2 Implémentation modulaire de la solution 
+• Module de réception des événements (traps/logs) 
+• Module d’analyse et de corrélation 
+• Moteur de règles 
+• Module de remédiation (SNMP SET) 
+• Module de journalisation et notification 
+4.3 Configuration et intégration SNMPv3 
+• Comptes, vues, restrictions d’accès 
+• Tests de sécurité et de connectivité 
+4.4 Déploiement pilote 
+• Périmètre de test (ULC-ICAM ou labo) 
+• Procédure d’installation 
+• Supervision post-déploiement 
+4.5 Méthodologie Agile (intégrée et limitée) 
+• Backlog fonctionnel 
+• Sprints successifs (monitoring → remédiation simple → remédiation avancée) 
+• Critères d’acceptation 
+CHAPITRE V — EXPÉRIMENTATIONS, TESTS ET ÉVALUATION 
+Objectif : validation scientifique et mesurable 
+5.1 Protocole expérimental 
+• Conditions de test 
+• Profils et scénarios 
+5.2 Scénarios d’incidents simulés 
+• Interface down 
+• Port flapping 
+• Saturation ou surcharge CPU 
+• Violation de politique réseau 
+5.3 Métriques d’évaluation 
+• Temps de réaction (détection → action) 
+• Taux de succès/échec 
+• Faux positifs / faux négatifs 
+• Impact sur la stabilité du réseau 
+• Performance du système 
+5.4 Résultats et analyses 
+• Tableaux et graphiques 
+• Comparaison remédiation manuelle vs automatisée 
+5.5 Discussion 
+• Interprétation des résultats 
+• Limites techniques et risques résiduels  
+CONCLUSION GÉNÉRALE ET PERSPECTIVES 
+• Synthèse du travail réalisé
+• Validation des objectifs et hypothèses 
+• Contributions scientifiques et techniques 
+• Recommandations pour l’ULC-ICAM 
+• Perspectives : 
+o intégration SIEM/SOAR 
+o transition vers APIs modernes (REST/NETCONF) 
+o pistes IA pour classification prédictive des incidents  
+RÉFÉRENCES 
+• Bibliographie 
+• Webographie 
+ANNEXES 
+• Code source Python 
+• Fichiers MIB / OID utilisés 
+• Scripts et configurations 
+• Topologie réseau 
+• Logs et captures d’écran 
+• Guides d’installation et d’exploitation

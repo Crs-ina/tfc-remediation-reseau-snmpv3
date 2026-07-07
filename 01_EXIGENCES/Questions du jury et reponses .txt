@@ -1,0 +1,33 @@
+C'est une excellente question, et c'est exactement le genre de chose qui peut faire la différence lors de ta soutenance. Voici comment aborder ça avec confiance.
+
+🎯 La réponse courte : Non, ce n'est PAS un problème — à condition de bien le justifier.
+Le jury ne t'en voudra pas d'avoir utilisé Cisco dans EVE-NG. Ce qu'il voudra s'assurer, c'est que tu comprends pourquoi tu as fait ce choix et que tu en connais les limites. Un étudiant qui anticipe et explique ses compromis techniques montre une vraie maturité académique.
+
+💬 Ce que tu dois dire au jury
+Tu peux répondre quelque chose comme ceci, dans tes propres mots :
+
+« Dans mon environnement de simulation EVE-NG, j'ai utilisé des images Cisco IOS pour représenter les équipements du réseau académique. Ce choix est justifié par trois raisons : premièrement, EVE-NG ne dispose pas d'images officielles Ubiquiti UniFi dans son catalogue d'émulation — les switches UniFi fonctionnent sous un firmware propriétaire non émulable. Deuxièmement, Cisco IOS est le standard de référence académique et industriel pour la validation des concepts réseau. Troisièmement, les protocoles que j'utilise — SNMPv3, STP, VLAN — sont des standards IEEE/IETF indépendants du fabricant, donc le comportement est identique entre Cisco et Ubiquiti à ce niveau. J'ai cependant documenté dans mon Chapitre II les écarts entre la simulation et le matériel réel, notamment les limites SNMP spécifiques aux équipements Ubiquiti. »
+
+
+📌 Les arguments solides à mémoriser
+Argument 1 — Impossibilité technique :
+Ubiquiti ne publie pas d'images de firmware pour les émulateurs comme EVE-NG ou GNS3. Il est donc techniquement impossible de simuler un UniFi USW Pro directement. Ce n'est pas un choix par défaut, c'est une contrainte réelle.
+Argument 2 — Universalité des protocoles :
+SNMPv3, STP, les boucles réseau, le port flapping — ce sont des standards ouverts (RFC/IEEE). Leur comportement ne dépend pas du fabricant. Un port flapping sur Cisco IOS se détecte avec les mêmes OIDs que sur Ubiquiti.
+Argument 3 — Pratique académique standard :
+Dans la littérature scientifique et dans la majorité des TFC similaires, Cisco IOS dans EVE-NG ou GNS3 est la référence. L'article académique sur EVE-NG que tu as dans ta bibliographie ([E2]) utilise lui-même cette approche.
+Argument 4 — Tu as documenté l'écart :
+Le plus important — si tu mentionnes dans ton Chapitre II les contraintes spécifiques Ubiquiti (SNMP lecture seule, SHA+AES-128 hardcodés, pas de SET SNMP), le jury verra que tu connais ton matériel réel ET tes limites de simulation. C'est ce qu'on appelle une analyse critique, et c'est très valorisé.
+
+🧠 Ce que tu dois absolument éviter de dire
+
+❌ « J'ai utilisé Cisco parce que c'est plus simple » — ça sonne comme de la paresse.
+❌ « Je ne savais pas qu'il y avait une différence » — ça montre un manque de recul.
+❌ Ignorer complètement la question ou hésiter.
+
+
+✅ Ce que tu dois faire dans ton TFC pour te protéger
+Dans ton Chapitre II (Étude de l'existant), ajoute un petit paragraphe intitulé quelque chose comme "Écart entre l'environnement de simulation et le matériel réel" où tu expliques en quelques lignes que les équipements réels sont des Ubiquiti UniFi USW Pro, que ces équipements ne sont pas émulables dans EVE-NG, et que tu as opté pour des images Cisco IOS comme équivalent fonctionnel, en précisant les différences connues côté SNMP.
+Ce paragraphe seul peut te sauver en soutenance. Il montre que tu n'as pas ignoré le problème — tu l'as vu, analysé et assumé.
+
+En résumé : le jury ne cherche pas la perfection technique, il cherche à voir si tu comprends ce que tu fais. Et là, tu le comprends très bien.

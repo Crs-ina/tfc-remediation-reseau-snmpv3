@@ -1,0 +1,22 @@
+# Machines virtuelles / fichiers lourds
+*.iso
+*.vmdk
+*.vmem
+*.vmss
+*.nvram
+*.vmsd
+*.vmxf
+*.scoreboard
+vmware.log
+mksSandbox.log
+
+# Fichiers temporaires Word
+~$*
+~WRL*.tmp
+
+# Système
+.DS_Store
+Thumbs.db
+
+*.exe
+*.vmx

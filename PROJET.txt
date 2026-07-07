@@ -1,0 +1,16 @@
+ressources consultés pour L'INTRODUCTION GENERALE 
+
+- https://www.fortinet.com/fr/resources/cyberglossary/what-is-cybersecurity le 09/05/2026 a 09h 51 
+- https://www.cisco.com/site/ca/fr/learn/topics/security/what-is-cybersecurity.html mm date 09h  54
+- https://www.mdpi.com/2073-431X/14/2/49 mm jour16h 41
+- https://www.sciencepublishinggroup.com/article/10.11648/j.iotcc.20251302.12 mm jour 17h 25
+- https://www.trendmicro.com/fr_fr/what-is/cybersecurity-platform/cyber-security.html 11/05/2026 17h 05
+- https://doi.org/10.6028/NIST.SP.800-61r3 13/05/2026 13:25
+- https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf 13/05/2026 16h17
+- https://www.paloaltonetworks.com/content/dam/pan/en_US/assets/pdf/reports/2024-unit42-incident-response-report.pdf 18/05/2026 10h08
+- https://newsroom.ibm.com/2024-07-30-ibm-report-escalating-data-breach-disruption-pushes-costs-to-new-highs mm jour 10h 49
+- https://doi.org/10.6028/NIST.SP.800-61r3 page 4
+- https://arxiv.org/pdf/2512.09934 mm jour juste lu l'abstract
+- https://www.nature.com/articles/s41598-025-97894-4 mm jour 
+- https://www.logicmonitor.com/blog/whats-with-the-different-snmp-versions-s1-v2c-v3 mm jour
+- https://lp.jetbrains.com/python-developers-survey-2023/  mm jour introduction et 3 premier graphique 

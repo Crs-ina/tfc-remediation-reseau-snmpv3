@@ -1,0 +1,122 @@
+Chunk 1
+
+PLAN DE TRAVAIL GLOBAL Automatisation de la remédiation de base du
+réseau après détection d’incidents de sécurité à l’aide de Python et
+SNMPv3 cas du réseau académique de l’ULC-ICAM ÉLÉMENTS PRÉLIMINAIRES
+Page de garde Dédicace Remerciements Résumé Français Mots clés Abstract
+English Keywords Table des matières Liste des sigles et abréviations
+Liste des figures et tableaux
+
+Chunk 2
+
+Liste des figures et tableaux INTRODUCTION GÉNÉRALE Contexte général
+cybersécurité des réseaux académiques ouverts Problématique de la
+détection et gestion des incidents réseau Limites de la remédiation
+manuelle latence erreurs humaines indisponibilité Rôle de
+l’automatisation dans la réduction du dwell time Justification du choix
+technologique Python et SNMPv3
+
+Chunk 3
+
+Justification du choix technologique Python et SNMPv3 Problématique
+centrale et questions de recherche Hypothèses de travail Objectif
+général Objectifs spécifiques Méthodologie générale analyse conception
+implémentation expérimentation Organisation du mémoire CHAPITRE I CADRE
+THÉORIQUE ET ÉTAT DE L’ART Objectif établir les fondements conceptuels
+et techniques
+
+Chunk 4
+
+CHAPITRE I CADRE THÉORIQUE ET ÉTAT DE L’ART Architecture et
+fonctionnement des réseaux académiques LAN VLAN Wi Fi équipements actifs
+Services critiques authentification Internet plateformes pédagogiques
+Sécurité réseau et gestion des incidents Principes de sécurité CIA Zero
+Trust Détection réponse remédiation différences complémentarité
+
+Chunk 5
+
+Détection réponse remédiation différences complémentarité Typologie des
+incidents réseau en milieu académique Tempêtes broadcast Propagation de
+malwares Scan interne usurpation Port flapping saturation liens
+interfaces down Protocole SNMP Architecture Manager Agent MIB OID
+Opérations GET SET TRAP INFORM Avantages limites
+
+Chunk 6
+
+Opérations GET SET TRAP INFORM Avantages limites SNMPv3 sécurité Modèle
+USM Authentification confidentialité authPriv Contrôle d’accès bonnes
+pratiques Python automatisation réseau Python NetDevOps Bibliothèques
+PySNMP easysnmp Avantages scripts remédiation Solutions existantes NMS
+Nagios Zabbix LibreNMS Limites contexte académique
+
+Chunk 7
+
+Limites contexte académique Justification solution proposée CHAPITRE II
+ÉTUDE DE L’EXISTANT ET ANALYSE DES BESOINS Présentation réseau
+académique Topologie logique physique Équipements switches routeurs
+points accès Segmentation services Dispositifs surveillance SNMP polling
+traps logs syslog Limites observées
+
+Chunk 8
+
+Limites observées Processus actuel remédiation Rôles administrateurs
+Étapes intervention Temps réaction Diagnostic insuffisances Incidents
+récurrents Absence automatisation Manque traçabilité standardisation
+Spécification besoins Fonctionnels déclenchement automatique
+identification IP MAC port actions correctives journalisation
+notification
+
+Chunk 9
+
+journalisation notification Besoins non fonctionnels sécurité fiabilité
+maintenabilité Non intrusivité contrôle risque Contraintes hétérogénéité
+équipements droits accès budget disponibilité CHAPITRE III CONCEPTION
+SOLUTION REMÉDIATION Architecture globale chaîne détection analyse
+décision action audit interactions Python SNMPv3
+
+Chunk 10
+
+interactions Python SNMPv3 Modélisation système cas utilisation
+diagrammes séquence activité Catalogue actions remédiation coupure
+réactivation interface quarantaine VLAN alerte escalade Logique
+décisionnelle gestion risque critères gravité type incident seuils
+temporisation anti boucle automatisation vs humain
+
+Chunk 11
+
+automatisation vs humain Module identification IP MAC port tables ARP
+Bridge MIB IF MIB modèle données JSON CSV SQLite Sécurisation solution
+SNMPv3 ACL gestion secrets journalisation audit dry run rollback
+CHAPITRE IV RÉALISATION INTÉGRATION DÉPLOIEMENT Environnement
+développement Python simulateurs réseau GNS3 EVE NG
+
+Chunk 12
+
+simulateurs réseau GNS3 EVE NG Implémentation modulaire réception
+événements analyse corrélation moteur règles module remédiation SNMP SET
+journalisation notification Configuration intégration SNMPv3 comptes
+vues restrictions accès tests sécurité connectivité Déploiement pilote
+périmètre test installation supervision
+
+Chunk 13
+
+installation supervision Méthodologie Agile backlog sprints monitoring
+remédiation simple avancée critères acceptation CHAPITRE V
+EXPÉRIMENTATIONS TESTS ÉVALUATION Protocole expérimental conditions test
+profils scénarios Incidents simulés interface down port flapping
+saturation CPU violation politique réseau
+
+Chunk 14
+
+violation politique réseau Métriques évaluation temps réaction taux
+succès échec faux positifs négatifs impact stabilité performance
+Résultats analyses tableaux graphiques comparaison remédiation manuelle
+automatisée Discussion interprétation limites risques résiduels
+
+Chunk 15
+
+limites risques résiduels CONCLUSION GÉNÉRALE Synthèse travail
+Validation objectifs hypothèses Contributions scientifiques techniques
+Recommandations Perspectives intégration SIEM SOAR transition APIs REST
+NETCONF IA classification prédictive incidents RÉFÉRENCES Bibliographie
+Webographie ANNEXES code Python MIB OID scripts topologie logs guides

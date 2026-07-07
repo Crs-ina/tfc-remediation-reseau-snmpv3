@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?><project name="Projet_TFC_Remediation_Reseau" company="" webLink="http://" view-date="2026-04-15" view-index="0" gantt-divider-location="351" resource-divider-location="300" version="3.3.3322" locale="en_US">
+    <description/>
+    <view zooming-state="default:0" id="gantt-chart">
+        <field id="tpd3" name="Name" width="200" order="0"/>
+        <field id="tpd4" name="Begin date" width="75" order="1"/>
+        <field id="tpd5" name="End date" width="75" order="2"/>
+        <field id="tpd15" name="Notes" width="20" order="3"/>
+        <option id="filter.completedTasks" value="false"/>
+        <option id="filter.dueTodayTasks" value="false"/>
+        <option id="filter.overdueTasks" value="false"/>
+        <option id="filter.inProgressTodayTasks" value="false"/>
+        <timeline><![CDATA[13,8,4,0,6,9,12,17,16,11,18,15,3,5,2,19,14,7,10,1]]></timeline>
+        <option id="color.recent"><![CDATA[#cc0000 #990033 #990000 #ff6666 #ff3333 #ff66cc #ff0099 #f4f4f4 #ff00cc #ff66ff]]></option>
+    </view>
+    <view id="resource-table">
+        <field id="0" name="Name" width="210" order="0"/>
+        <field id="1" name="Default role" width="86" order="1"/>
+    </view>
+    <!-- -->
+    <calendars>
+        <day-types>
+            <day-type id="0"/>
+            <day-type id="1"/>
+            <default-week id="1" name="default" sun="1" mon="0" tue="0" wed="0" thu="0" fri="0" sat="1"/>
+            <only-show-weekends value="false"/>
+            <overriden-day-types/>
+            <days/>
+        </day-types>
+    </calendars>
+    <tasks empty-milestones="true">
+        <taskproperties>
+            <taskproperty id="tpd0" name="type" type="default" valuetype="icon"/>
+            <taskproperty id="tpd1" name="priority" type="default" valuetype="icon"/>
+            <taskproperty id="tpd2" name="info" type="default" valuetype="icon"/>
+            <taskproperty id="tpd3" name="name" type="default" valuetype="text"/>
+            <taskproperty id="tpd4" name="begindate" type="default" valuetype="date"/>
+            <taskproperty id="tpd5" name="enddate" type="default" valuetype="date"/>
+            <taskproperty id="tpd6" name="duration" type="default" valuetype="int"/>
+            <taskproperty id="tpd7" name="completion" type="default" valuetype="int"/>
+            <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
+            <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
+        </taskproperties>
+        <task id="0" uid="47933354285f490380340cca01f43542" name="Phase 1 : Finalisation de la Conception" color="#33ccff" meeting="false" start="2026-04-15" duration="6" complete="55" expand="true">
+            <depend id="1" type="2" difference="0" hardness="Strong"/>
+            <depend id="2" type="2" difference="0" hardness="Strong"/>
+            <task id="4" uid="78b954c6a13e4cac87a218db6098aa1a" name="Tâche 1.1 : Finalisation du Cahier des Charges (CdC) intégrant les exigences corrigées" color="#66ccff" meeting="false" start="2026-04-15" duration="3" complete="100" expand="true"/>
+            <task id="5" uid="11b2457a31014c2f9c35c7d251c8cce2" name="Tâche 1.2 : Modélisation UML : Diagramme de Séquence (Flux d'alerte) et Diagramme de Cas d'Utilisation" color="#00cccc" meeting="true" start="2026-04-17" duration="0" complete="0" expand="true"/>
+            <task id="6" uid="cd47e28eb1ef4996bec8e1f1dc1711fc" name="Tâche 1.3 : Rédaction de la méthodologie de test pour EVE-NG" color="#3399ff" meeting="false" start="2026-04-20" duration="3" complete="10" priority="2" expand="true"/>
+        </task>
+        <task id="1" uid="1cd9c3f09476456b86563b845b84e2dd" name="Phase 2 : Laboratoire et Connectivité" color="#6666ff" meeting="false" start="2026-04-24" duration="7" complete="0" expand="false">
+            <depend id="2" type="2" difference="0" hardness="Strong"/>
+            <task id="7" uid="fb45b7d392c2487d93a21dedcb512ddb" name="Tâche 2.1 : Montage de la topologie dans EVE-NG (Switch UniFi/Cisco + Client + Machine de Management)" color="#9999ff" meeting="false" start="2026-04-24" duration="2" complete="0" expand="true"/>
+            <task id="8" uid="2a346f879b28442781750eaefd8f584c" name="Tâche 2.2 : Configuration du SNMPv3 sur les équipements (Utilisateurs, AuthKey, PrivKey" color="#6633ff" meeting="false" start="2026-04-27" duration="3" complete="0" expand="true"/>
+            <task id="9" uid="3fa391fd557b49809f63546a70dbfcb7" name="Tâche 2.3 : Test de connectivité simple via Python (pysnmp GET) pour valider l'accès" color="#6666ff" meeting="false" start="2026-04-29" duration="4" complete="0" expand="true"/>
+        </task>
+        <task id="2" uid="f870ac1ace2043bc868ab40151ce232a" name="Phase 3 : Développement du Module de Détection" color="#ff00cc" meeting="false" project="true" start="2026-05-05" duration="9" complete="0" expand="false">
+            <depend id="3" type="2" difference="0" hardness="Strong"/>
+            <task id="10" uid="fa113f6fbf864cc39dc65ce0be89b516" name="Tâche 3.1 : Écriture du script de monitoring des traps SNMP ou interrogation périodique" color="#ff66cc" meeting="false" start="2026-05-05" duration="3" complete="0" expand="true"/>
+            <task id="11" uid="a675e5d96d134a3497634871ec40aca0" name="Tâche 3.2 : Développement de la logique d'identification (Mapping MAC address vers Port Physique via la MIB Bridge)" color="#ff0099" meeting="false" start="2026-05-07" duration="3" complete="0" expand="true"/>
+            <task id="12" uid="9095517259b045c8b3cd767c4d74e507" name="Tâche 3.3 : Intégration de la Liste Blanche (Whitelist) pour ignorer les ports critiques" color="#ff00cc" meeting="false" start="2026-05-11" duration="5" complete="0" expand="true"/>
+        </task>
+        <task id="16" uid="4478ac75c5884900a064d03fa8d2745a" name="Phase 5 : Tests et Finalisation du Rapport" color="#990000" meeting="false" start="2026-06-01" duration="8" complete="0" expand="false">
+            <task id="17" uid="b79c2a0cd29c46c18efe2dcfcefb30ce" name="Tâche 5.1 : Tests unitaires et stress-tests dans EVE-NG (Simuler une boucle et mesurer le temps de réponse)" color="#cc0000" meeting="false" start="2026-06-01" duration="3" complete="0" expand="true"/>
+            <task id="18" uid="bd068b558ca8460d8b9937a755e26ad6" name="Tâche 5.2 : Captures d'écran des résultats pour le Chapitre IV." color="#990033" meeting="false" start="2026-06-04" duration="1" complete="0" expand="true"/>
+            <task id="19" uid="c8b989939faa44489fa70e9ea7d8aa0f" name="Tâche 5.3 : Relecture finale du manuscrit et mise en page (Zotero pour la bibliographie)" color="#cc0000" meeting="false" start="2026-06-08" duration="3" complete="0" expand="true"/>
+        </task>
+        <task id="3" uid="c4f13f5dc05d4605adad5d0be3edb7fa" name="Phase 4 : Développement de la Remédiation et Interface" color="#ff3333" meeting="false" start="2026-05-18" duration="5" complete="0" expand="false">
+            <depend id="16" type="2" difference="0" hardness="Strong"/>
+            <task id="13" uid="a18f0bf48cb44e45971895474e740644" name="Tâche 4.1 : Développement du module de validation humaine (Notification console ou interface simple)." color="#cc0000" meeting="false" start="2026-05-18" duration="4" complete="0" expand="true"/>
+            <task id="14" uid="0be8fb1cee9f4633a23d4b9dd2245912" name="Tâche 4.2 : Codage de la fonction de remédiation : Envoi du SNMP SET pour changer le VLAN du port" color="#ff3333" meeting="false" start="2026-05-18" duration="3" complete="0" expand="true"/>
+            <task id="15" uid="ff1b0e40c2ab4f2cb823d8565b5a5995" name="Tâche 4.3 : Module d'archivage des logs (écriture dans un fichier CSV ou TXT avec horodatage)" color="#ff6666" meeting="false" start="2026-05-18" duration="5" complete="0" expand="true"/>
+        </task>
+    </tasks>
+    <resources/>
+    <allocations/>
+    <vacations/>
+    <previous/>
+    <roles roleset-name="Default"/>
+</project>

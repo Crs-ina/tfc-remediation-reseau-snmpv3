@@ -1,0 +1,13 @@
+PHASE 1 : ANALYSE          PHASE 2 : CONCEPTION
+─────────────────          ────────────────────
+- Revue littérature   →    • Architecture système
+- État de l'art            • Diagrammes UML
+- Étude terrain            • Catalogue remédiation
+- Spec. besoins            • Logique décisionnelle
+
+PHASE 3 : IMPLÉMENTATION   PHASE 4 : EXPÉRIMENTATION
+────────────────────────   ─────────────────────────
+- Env. EVE-NG         →    • Scénarios incidents
+- Scripts Python           • Métriques mesurées
+- Config. SNMPv3           • Comparaison manuelle
+- Tests unitaires          • Analyse résultats

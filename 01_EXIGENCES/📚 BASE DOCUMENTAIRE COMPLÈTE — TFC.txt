@@ -1,0 +1,270 @@
+📚 BASE DOCUMENTAIRE COMPLÈTE — TFC Licence Bac+4
+« Automatisation de la remédiation réseau via Python & SNMPv3 — Cas ULC-ICAM »
+
+⚠️ Note critique préalable : Tes équipements réels sont des Ubiquiti UniFi USW Pro. Ces switches supportent SNMPv3, mais avec des contraintes importantes : protocoles SHA + AES-128 uniquement (hardcodés), pas de SET SNMP (lecture seule via SNMP), et OIDs limités. Dans EVE-NG, tu simuleras avec des images Cisco IOS (mieux supportées), mais tu devras documenter cet écart dans ton Chapitre II.
+
+
+🔑 1. MOTS-CLÉS SCIENTIFIQUES DE RECHERCHE
+DomaineMots-clésSécurité réseaunetwork incident detection, network security academic, intrusion detection system, zero trust networkRemédiationautomated network remediation, automated incident response, network self-healing, dwell time reductionSNMPSNMPv3 USM, SNMP MIB OID automation, SNMPv3 authPriv, SNMP trap monitoringPythonPython network automation, PySNMP, NetDevOps Python, Python SNMP scriptingIncidents ciblésSTP loop detection, port flapping, ARP spoofing detection, broadcast storm, DDoS detection LANSimulationEVE-NG network emulation, virtual network lab, GNS3 EVE-NG comparisonContexteacademic network security, campus network incident, university network management
+
+📂 2. SOURCES CLASSÉES PAR CATÉGORIES
+
+🏛️ CATÉGORIE A — ÉTAT DE L'ART & FONDEMENTS THÉORIQUES
+
+[A1] RFC 3410 — Introduction to Internet-Standard Management Framework
+
+Type : Norme IETF
+Auteurs : Case, Mundy, Partain, Stewart (IETF SNMPv3 Working Group)
+Année : 2002
+Lien : https://datatracker.ietf.org/doc/html/rfc3410
+Résumé : Ce document constitue le point d'entrée officiel de la suite SNMPv3. Il explique pourquoi l'utilisation de SNMPv3 est fortement recommandée à la place de SNMPv1 ou SNMPv2, et introduit l'ensemble de l'architecture modulaire du framework de gestion de réseau. IETF
+Utilité TFC : Référence fondamentale pour justifier le choix de SNMPv3 dans le Chapitre I. À citer en premier dans ta section "Justification du choix technologique".
+
+
+[A2] RFC 3411 — Architecture for Describing SNMP Management Frameworks
+
+Type : Standard IETF (STD 62)
+Auteurs : Harrington, Presuhn, Wijnen
+Année : 2002
+Lien : https://datatracker.ietf.org/doc/html/rfc3411
+Résumé : Ce RFC définit l'architecture complète de SNMPv3, notamment le nouveau format de message, la sécurité des messages, le contrôle d'accès, et la configuration distante des paramètres SNMP. IETF
+Utilité TFC : Base du Chapitre I sur l'architecture Manager/Agent/MIB.
+
+
+[A3] RFC 3414 — User-Based Security Model (USM) for SNMPv3
+
+Type : Standard IETF (STD 62)
+Auteurs : Blumenthal, Wijnen
+Année : 2002
+Lien : https://datatracker.ietf.org/doc/html/rfc3414
+Résumé : Ce RFC décrit le modèle de sécurité basé sur l'utilisateur (USM) pour SNMPv3, incluant les mécanismes d'authentification et de confidentialité qui constituent le cœur de la sécurité de SNMPv3. Snmp
+Utilité TFC : Section "SNMPv3 sécurité / Modèle USM / authPriv" du Chapitre I. Explique précisément SHA et AES que ton matériel Ubiquiti utilise.
+
+
+[A4] RFC 3415 — View-Based Access Control Model (VACM) for SNMP
+
+Type : Standard IETF (STD 62)
+Auteurs : Wijnen, Presuhn, McCloghrie
+Année : 2002
+Lien : https://datatracker.ietf.org/doc/html/rfc3415
+Résumé : Définit le modèle VACM qui contrôle l'accès aux OIDs selon des vues. Permet de restreindre ce que chaque utilisateur SNMP peut lire ou modifier.
+Utilité TFC : Section "Contrôle d'accès / bonnes pratiques" du Chapitre I et sécurisation dans le Chapitre III.
+
+
+[A5] RFC 3826 — AES Cipher Algorithm in SNMPv3 USM
+
+Type : Norme IETF
+Année : 2004
+Lien : https://datatracker.ietf.org/doc/html/rfc3826
+Résumé : Spécifie l'utilisation d'AES comme algorithme de chiffrement dans le modèle USM de SNMPv3, remplaçant DES jugé insuffisant.
+Utilité TFC : Justifie l'usage d'AES-128 sur les équipements Ubiquiti. Référence clé pour la section sécurité.
+
+
+[A6] "The Practice of Network Security Monitoring" — Bejtlich, R.
+
+Type : Livre académique
+Éditeur : No Starch Press, 2013. ISBN : 978-1593275099
+Résumé : Cet ouvrage de référence soutient que la sécurité réseau ne se limite pas à la construction de murs impénétrables. Il intègre la surveillance de la sécurité réseau (NSM) comme stratégie centrale, à travers la collecte et l'analyse de données pour détecter et répondre aux intrusions. Barnes & Noble
+Utilité TFC : Fondement théorique pour la détection et la réponse aux incidents. Citable dans l'introduction générale et le Chapitre I.
+
+
+[A7] "The Critical Role of SNMP in Enabling Network Security" — Preprint
+
+Type : Article de revue (preprint, MDPI Preprints)
+Année : 2023
+Lien : https://www.preprints.org/manuscript/202310.0512
+Résumé : Cet article de synthèse analyse l'utilisation des données SNMP pour développer des solutions de sécurité réseau pilotées par l'IA et le machine learning. Il examine le potentiel de SNMP pour les systèmes de détection d'intrusion, les analyses de sécurité, et la surveillance en temps réel, tout en soulignant les vulnérabilités persistantes des versions SNMP v1/v2c dues aux chaînes de communauté par défaut. Preprints.org
+Utilité TFC : État de l'art sur SNMP + sécurité. Appuie la justification du choix de SNMPv3.
+
+
+[A8] "Formal Security Analysis of Authentication in SNMPv3" — IEEE
+
+Type : Article de conférence IEEE
+Lien : https://ieeexplore.ieee.org/document/6483143/
+Résumé : Cet article propose une vérification formelle et automatisée du protocole SNMPv3 en utilisant le vérificateur ProVerif. Il modélise les trois mécanismes de sécurité de SNMPv3 (authentification, chiffrement, contrôle d'accès) via le pi-calcul appliqué et prouve l'authenticité du protocole. IEEE Xplore
+Utilité TFC : Renforce la crédibilité scientifique du choix SNMPv3 dans le Chapitre I.
+
+
+🚨 CATÉGORIE B — DÉTECTION D'INCIDENTS RÉSEAU
+
+[B1] "IoTEdu: Access Control, Detection, and Automatic Incident Response in Academic IoT Networks"
+
+Type : Article scientifique (arXiv/preprint)
+Auteurs : Assolin, Kreutz, Bertholdo — Universités brésiliennes (UFAM, UNIPAMPA, UFRGS)
+Année : 2024
+Lien : https://arxiv.org/pdf/2512.09934
+Résumé : Ce travail présente IoTEdu, une plateforme intégrée qui combine le contrôle d'accès, la détection d'incidents et le blocage automatique dans un réseau académique IoT. La solution a été évaluée dans un environnement contrôlé avec des attaques simulées, atteignant un temps moyen de 28,6 secondes entre la détection et le blocage, réduisant significativement l'intervention manuelle. arxiv
+Utilité TFC : Source prioritaire — Cas d'usage très proche du tien (réseau académique + remédiation automatique). À citer pour comparer dans le Chapitre V.
+
+
+[B2] "A Study on Incident Response Playbooks and Influencing Factors" — IEEE S&P 2024
+
+Type : Article de conférence IEEE Symposium on Security and Privacy
+Auteurs : Schlette, Empl, Caselli, Schreck, Pernul
+Année : 2024
+Lien : https://sp2024.ieee-security.org/accepted-papers.html
+Résumé : Cette étude examine les playbooks de réponse aux incidents et les facteurs qui influencent leur efficacité, en s'appuyant sur des données empiriques collectées auprès de professionnels de la sécurité. Ieee-security
+Utilité TFC : Appuie la conception de ta logique décisionnelle (Chapitre III) — automatisation vs intervention humaine.
+
+
+[B3] "Investigating the Causes of Exposed IoT Devices in an Academic Network" — IEEE S&P 2024
+
+Type : Article de conférence IEEE
+Auteurs : Sasaki, Noma, et al. — Yokohama National University
+Année : 2024
+Résumé : Étude empirique des vulnérabilités exposées dans un réseau académique réel, analysant les causes d'exposition des équipements IoT et les failles de gestion.
+Utilité TFC : Contextualise les risques dans les réseaux académiques — utile pour la Problématique et le Chapitre II.
+
+
+🔧 CATÉGORIE C — REMÉDIATION AUTOMATISÉE
+
+[C1] "Optimization of Network Device Hardening in a Multivendor Environment" — Scientific Reports (Nature)
+
+Type : Article de revue scientifique (Nature/Scientific Reports)
+Année : 2025
+Lien : https://www.nature.com/articles/s41598-025-97894-4
+Résumé : Cet article présente un framework Python (Nornir) pour automatiser le durcissement des équipements réseau dans des environnements multi-vendeurs. La solution impose les benchmarks CIS sur des équipements Cisco, Juniper et Fortinet, atteignant une réduction de 82% du temps de durcissement par rapport aux techniques manuelles, avec un durcissement complet en 44 secondes sur 18 équipements hétérogènes. Nature
+Utilité TFC : Démontre l'efficacité mesurable de l'automatisation réseau via Python. Données comparables pour ton Chapitre V.
+
+
+[C2] "Python-Based Security Operations Center (SOC) and Forensics Analysis" — IJRASET 2024
+
+Type : Article de revue
+Année : 2024
+Lien : https://doi.org/10.22214/ijraset.2024.60403
+Résumé : Ce papier propose un framework Python pour renforcer les capacités des SOCs, combinant surveillance des menaces en temps réel, analyse des incidents et investigation forensique. Il démontre que Python permet de concevoir un workflow complet de réponse aux incidents de bout en bout. IJRASET
+Utilité TFC : Architecture de référence pour ton module de remédiation (Chapitre III et IV).
+
+
+[C3] "Network Automation with Python: Building Scripts to Validate, Monitor, and Secure" — Netpicker
+
+Type : Documentation technique professionnelle
+Année : 2025
+Lien : https://netpicker.io/blog/network-automation-with-python-building-scripts-to-validate-monitor-and-secure/
+Résumé : Cet article technique démontre que Python permet d'automatiser la détection de vulnérabilités et la remédiation dans les infrastructures réseau, notamment via des scripts de scanning, de vérification de configuration et de surveillance en temps réel. Netpicker
+Utilité TFC : Base pratique pour le Chapitre IV (implémentation). À citer pour justifier les cas d'usage Python.
+
+
+🐍 CATÉGORIE D — PYTHON & AUTOMATISATION RÉSEAU
+
+[D1] PySNMP — Documentation officielle v7.1
+
+Type : Documentation technique officielle
+Lien : https://docs.lextudio.com/pysnmp/v7.1/index.html
+Résumé : PySNMP 7.1 est la version stable actuelle, compatible Python 3.10+. Elle fournit une implémentation complète du moteur SNMP en Python pur, incluant SNMPv3 avec USM et VACM, et est recommandée pour toutes les nouvelles applications. Lextudio
+Utilité TFC : Référence technique principale pour l'implémentation. Chapitres I et IV.
+
+
+[D2] PySNMP — Dépôt GitHub officiel (lextudio/pysnmp)
+
+Type : Code source / Documentation technique
+Lien : https://github.com/lextudio/pysnmp
+Résumé : PySNMP est une implémentation Python open-source et gratuite du moteur SNMP v1/v2c/v3, distribuée sous licence BSD. Elle supporte USM avec chiffrement 3DES, AES 128/192/256 bits, et fournit un framework de transport extensible via UDP/IPv4 et IPv6. GitHub
+Utilité TFC : Référence pour les exemples de code dans les Annexes et le Chapitre IV.
+
+
+[D3] EasySNMP — Documentation officielle
+
+Type : Documentation technique officielle
+Lien : https://easysnmp.readthedocs.io/en/latest/
+Résumé : EasySNMP est un fork des bindings Python officiels de Net-SNMP, offrant une interface plus Pythonique pour la bibliothèque. Il fournit une API SNMP complète supportant tous les dialectes du protocole SNMP. Readthedocs
+Utilité TFC : Alternative à PySNMP à évaluer dans le Chapitre I (comparatif bibliothèques).
+
+
+[D4] "Network Programmability and Automation" — Natasha Irons, Jason Edelman, Scott Lowe
+
+Type : Livre académique/professionnel
+Éditeur : O'Reilly Media, 2022 (2e édition). ISBN : 978-1098110833
+Résumé : Référence standard pour l'automatisation réseau avec Python, couvrant NetDevOps, Netmiko, Nornir, NAPALM, et les API réseau modernes. Niveau intermédiaire.
+Utilité TFC : Manuel de référence pour tes implémentations Python — Chapitres I, III et IV.
+
+
+[D5] "Python for Network Engineers" — Kirk Byers
+
+Type : Cours/documentation en ligne (référence reconnue)
+Lien : https://pynet.twb-tech.com/
+Résumé : Cours de référence sur Python appliqué à l'automatisation réseau, couvrant Paramiko, Netmiko, et SNMP. Largement utilisé dans la communauté NetDevOps.
+Utilité TFC : Support pratique pour le niveau intermédiaire en Python (Chapitre IV).
+
+
+🖥️ CATÉGORIE E — SIMULATION RÉSEAU AVEC EVE-NG
+
+[E1] EVE-NG — Documentation officielle
+
+Type : Documentation officielle
+Lien : https://www.eve-ng.net/
+Résumé : EVE-NG PRO est la première solution d'émulation réseau multi-vendeur sans client permettant aux entreprises, prestataires e-learning et individus de créer des preuves de concept virtuelles. La version Community est gratuite et adaptée aux projets académiques individuels. EVE-NG
+Utilité TFC : Référence principale pour la présentation d'EVE-NG dans le Chapitre I et la justification du choix dans le Chapitre IV.
+
+
+[E2] "Eve-NG simulator in projects of heterogeneous networks" — Research, Society and Development (2020)
+
+Type : Article scientifique (revue indexée, DOI Crossref)
+DOI : 10.33448/rsd-v9i11.9562
+Lien : https://rsdjournal.org/index.php/rsd/article/view/9562
+Résumé : Cet article présente une étude sur l'importance et les bénéfices de l'utilisation d'EVE-NG pour la simulation de réseaux hétérogènes dans un contexte académique, incluant la modélisation d'un réseau multi-sites avec tunnels IPSec chiffrés, sans installation lourde côté client. Research, Society and Development
+Utilité TFC : Article académique sur EVE-NG — exactement ce qu'il te faut pour justifier scientifiquement l'outil de simulation au Chapitre I.
+
+
+[E3] "EVE-NG Network Simulator: Features, Setup & Hosted Labs Guide" — CloudMyLab
+
+Type : Documentation technique professionnelle
+Lien : https://blog.cloudmylab.com/eve-ng-network-simulator
+Résumé : Guide technique détaillant comment EVE-NG permet d'exécuter de véritables systèmes d'exploitation vendeurs (Cisco IOS, Juniper, Palo Alto, etc.) dans une interface navigateur, et comment l'intégrer dans des pipelines Python pour des tests d'automatisation réalistes. Cloudmylab
+Utilité TFC : Référence pratique pour le Chapitre IV — configuration de l'environnement de test EVE-NG.
+
+
+🔌 CATÉGORIE F — ÉQUIPEMENTS UBIQUITI UNIFI & SNMP
+
+[F1] "SNMP Monitoring in UniFi Network" — Ubiquiti Help Center (Documentation officielle)
+
+Type : Documentation officielle fabricant
+Lien : https://help.ui.com/hc/en-us/articles/33502980942615
+Résumé : La documentation officielle Ubiquiti indique que les switches UniFi supportent SNMP v1/v2c et v3 pour la supervision avec des outils tiers. La version SNMPv3 utilise un nom d'utilisateur et un mot de passe pour un accès authentifié et optionnellement chiffré, et les fichiers MIB UniFi sont fournis pour améliorer la lisibilité des OIDs. Ubiquiti
+Utilité TFC : Référence technique critique pour le Chapitre II (contraintes réelles du matériel). Documente les limites SNMP des équipements ULC-ICAM.
+
+
+[F2] "How to enable SNMPv3 on Ubiquiti UniFi devices" — Auvik Support
+
+Type : Documentation technique professionnelle
+Lien : https://support.auvik.com/hc/en-us/articles/360000842663
+Résumé : Ce guide technique précise que SNMPv3 sur les contrôleurs UniFi utilise SHA pour l'authentification et AES-128 pour la confidentialité (hardcodés), et que le même mot de passe est utilisé pour les deux paramètres. La configuration est globale — pas de toggle SNMP par équipement. Auvik Support
+Utilité TFC : Contrainte de conception majeure à documenter dans le Chapitre II (Spécification des besoins / Contraintes).
+
+
+🏆 3. TOP 7 SOURCES PRIORITAIRES
+#SourcePourquoi prioritaire🥇[B1] IoTEdu — Arxiv 2024Seul article académique traitant exactement de remédiation automatique en réseau académique🥈[D1] PySNMP Docs v7.1Bibliothèque principale d'implémentation🥉[A3] RFC 3414 USMFondement normatif de la sécurité SNMPv34[A1] RFC 3410Justification officielle du choix SNMPv35[C1] Scientific Reports 2025Preuves mesurables de l'efficacité de l'automatisation Python6[E2] Article EVE-NG (2020)Seul article scientifique académique sur EVE-NG7[F1] Ubiquiti SNMP DocsContraintes réelles de tes équipements
+
+⚠️ 4. POINTS D'ATTENTION SPÉCIFIQUES À TON TFC
+
+Contrainte Ubiquiti critique : Les switches USW Pro ne supportent pas le SNMP SET (écriture). Cela signifie que la remédiation via SNMP pur (couper un port via ifAdminStatus SET) peut être bloquée sur le matériel réel. Dans EVE-NG avec Cisco IOS, le SET SNMP fonctionne. Tu devras documenter cet écart et envisager une remédiation via l'API UniFi comme alternative ou complément dans les perspectives.
+
+
+Pour le Chapitre II, utilise les sources [F1] et [F2] pour documenter cet écart entre la théorie SNMP (Cisco-centric) et ta réalité terrain (Ubiquiti).
+
+
+📋 5. FORMAT BIBLIOGRAPHIQUE (norme IEEE)
+[1] IETF, "RFC 3410: Introduction and Applicability Statements for 
+    Internet-Standard Management Framework," J. Case et al., Dec. 2002.
+    [Online]. Available: https://datatracker.ietf.org/doc/html/rfc3410
+
+[2] IETF, "RFC 3414: User-Based Security Model (USM) for SNMPv3,"
+    U. Blumenthal, B. Wijnen, Dec. 2002.
+    [Online]. Available: https://datatracker.ietf.org/doc/html/rfc3414
+
+[3] J. Assolin, D. Kreutz, L. Bertholdo, "IoTEdu: Access Control, 
+    Detection, and Automatic Incident Response in Academic IoT Networks," 
+    arXiv preprint arXiv:2512.09934, 2024.
+
+[4] R. Bejtlich, "The Practice of Network Security Monitoring," 
+    No Starch Press, 2013. ISBN: 978-1593275099.
+
+[5] lextudio/pysnmp, "PySNMP v7.1 Documentation," 2024.
+    [Online]. Available: https://docs.lextudio.com/pysnmp/v7.1/
+
+[6] Sousa et al., "Eve-NG simulator in projects of heterogeneous 
+    networks," Research, Society and Development, v.9, n.11, 2020. 
+    DOI: 10.33448/rsd-v9i11.9562
+
+[7] Ubiquiti Inc., "SNMP Monitoring in UniFi Network," 2024.
+    [Online]. Available: https://help.ui.com/hc/en-us/articles/33502980942615
