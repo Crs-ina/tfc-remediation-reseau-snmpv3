@@ -1,0 +1,32 @@
+je pense a plusieuers sujets en ce moment manque plus que les formuler, il existe une sorte de logiciel malveillant qui s'appelle filelessware on ne peut le stocker que dans la RAM dans mon sujet de defense je veux exploiter ce sujet la en implementant une solution AI dessus mais on verra bien ce que l'avenir nous reserve. see me there. 
+ Faire des recerches par rapport aussi au SOAR  il est un peu comme un outils SIEM. 
+- Système d'authentification adaptatif basé sur l'analyse comportementale (UEBA)
+
+Description : Concevoir un prototype qui ajuste le niveau de sécurité (ex: demande de double authentification) selon l'heure de connexion, l'IP et les habitudes de l'utilisateur bancaire, codé en Python.
+
+Originalité : Sujet très actuel en banque pour améliorer l'expérience client tout en sécurisant les accès.
+
+Références : Framework NIST, documentation Python-Flask pour le prototype.
+
+- Prédiction du taux de désabonnement (Churn) des clients bancaires par analyse de données transactionnelles
+
+Description : Analyse de l'historique des mouvements de comptes pour prédire quels clients risquent de quitter la banque. Le modèle peut tourner sur un simple PC portable.
+
+Originalité : Impact direct sur le chiffre d'affaires de FirstBank.
+
+Références : Kaggle (Bank Turnover Dataset), Pandas/Matplotlib pour la data viz.
+
+Titre : Conception d'une micro-plateforme SOAR open-source pour l'automatisation de la réponse aux incidents de phishing bancaire.
+
+Description : Création d'un workflow automatisé : réception d'un mail suspect -> analyse automatique des liens (via API VirusTotal) -> alerte automatique à l'utilisateur, le tout orchestré par Python.
+
+Faisabilité et originalité : Sujet très professionnel. Évite l'achat de solutions coûteuses comme Splunk Phantom en proposant une alternative "maison".
+
+Références : API VirusTotal, Protocoles IMAP/SMTP en Python.
+
+. Automatisation de la remédiation réseau post-intrusion via Python et SNMP
+Description : Utiliser des outils de simulation (GNS3) pour créer un réseau bancaire et scripter en Python la fermeture automatique de ports de switches ou le changement de VLAN dès qu'une intrusion est détectée.
+
+Originalité : Approche "Self-healing network" (réseau auto-guérisseur), très recherchée pour la résilience bancaire.
+
+Références : Bibliothèques Netmiko ou Napalm, protocoles SNMP.
