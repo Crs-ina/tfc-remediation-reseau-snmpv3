@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "playbook_id": "PB-PHYSICAL-DOWN-001",
+    "title": "Deconnexion physique - verification et escalade",
+    "version": "1.1",
+    "status": "prototype"
+  },
+  "incident_type": "physical_disconnection",
+  "policies": {
+    "network_change_allowed": false,
+    "remediation_max_attempts": 0,
+    "rollback_automatic": false
+  },
+  "automation": {
+    "allowed_outside_business_hours": false
+  },
+  "decision": {
+    "proposed_action": "NO_ACTION",
+    "disruptive": false,
+    "read_only_checks": ["IF-MIB::ifAdminStatus", "IF-MIB::ifOperStatus"]
+  }
+}

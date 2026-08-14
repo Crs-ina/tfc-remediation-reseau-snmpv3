@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "source": "zabbix",
+  "event": {
+    "id": "15472",
+    "name": "Network loop detected",
+    "status": "PROBLEM",
+    "value": 1,
+    "severity": "High",
+    "severity_num": 4,
+    "timestamp": 1786531841
+  },
+  "trigger": {
+    "id": "20451",
+    "name": "Network loop detected"
+  },
+  "host": {
+    "id": "10632",
+    "name": "EVE-NG-SW1",
+    "ip": "192.0.2.10"
+  },
+  "routing": {
+    "incident_type": "network_loop"
+  },
+  "target_hint": {
+    "client_ip": null,
+    "client_mac": null,
+    "interface": "Gi0/4"
+  },
+  "context": {
+    "opdata": "Possible switching loop",
+    "tags": [
+      {"tag": "remediation", "value": "enabled"},
+      {"tag": "incident_type", "value": "network_loop"}
+    ]
+  }
+}
+

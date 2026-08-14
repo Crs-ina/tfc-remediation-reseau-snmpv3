@@ -1,0 +1,20 @@
+{
+  "metadata": {
+    "playbook_id": "PB-UNKNOWN-001",
+    "title": "Incident non reconnu - journalisation et escalade",
+    "version": "1.1",
+    "status": "prototype"
+  },
+  "incident_type": null,
+  "policies": {
+    "network_change_allowed": false,
+    "rollback_automatic": false
+  },
+  "automation": {
+    "allowed_outside_business_hours": false
+  },
+  "decision": {
+    "proposed_action": "NO_ACTION",
+    "disruptive": false
+  }
+}

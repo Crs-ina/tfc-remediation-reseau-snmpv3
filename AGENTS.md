@@ -161,14 +161,38 @@ et non comme supporté.
 
 ### Phase actuelle
 
-La phase initiale SNMP doit être **strictement read-only**.
+La découverte et la qualification SNMP restent **strictement read-only**.
 
-Interdit tant que les OID et capacités ne sont pas validés dans le laboratoire :
+Une seule capacité d’écriture est actuellement validée en laboratoire :
 
-- SNMP SET de shutdown ;
-- changement de VLAN ;
-- réactivation de port ;
-- rollback par écriture SNMP.
+```text
+Plateforme : Arista vEOS 4.29.2F
+Contexte   : EVE-NG uniquement
+SNMP       : v3 authPriv, SHA-256, AES-256
+Objet      : Q-BRIDGE-MIB::dot1qPvid
+GET        : LAB_VALIDATED
+SET        : LAB_VALIDATED
+```
+
+Le `SET Q-BRIDGE-MIB::dot1qPvid` est autorisé uniquement si toutes les
+conditions suivantes sont réunies :
+
+- `SNMP_WRITE_ENABLED=true` ;
+- modèle exact `Arista vEOS 4.29.2F` et profil de capacité `LAB_VALIDATED` ;
+- MIB locales préchargées et objet résolu symboliquement ;
+- cible et port confirmés en lecture seule ;
+- cible absente de la whitelist ;
+- VLAN 18 existant et isolé ;
+- état pré-action et `previous_pvid` sauvegardés ;
+- validation humaine explicite ;
+- GET post-action égal à la valeur demandée.
+
+Le rollback reste uniquement explicite, vers le `previous_pvid` sauvegardé,
+avec GET de vérification. Tout autre SET reste interdit, notamment shutdown,
+réactivation de port ou écriture sur un objet non validé.
+
+Les équipements UniFi réels restent `TO_BE_VALIDATED` : aucune écriture SNMP
+ne doit être tentée sur UniFi sur la base de la validation Arista.
 
 ## 10. MIB/OID standards de référence
 
@@ -316,11 +340,11 @@ Pour le code SNMP, séparer :
 
 Ne jamais faire échouer les tests unitaires simplement parce qu’un équipement EVE-NG n’est pas disponible.
 
-## 17. Première mission d’implémentation SNMP
+## 17. État de l’implémentation SNMP
 
-La première mission SNMP est :
+Le module de découverte SNMPv3 reste :
 
-**Créer un module de découverte SNMPv3 strictement read-only.**
+**strictement read-only et séparé du client de remédiation.**
 
 Il doit :
 
@@ -336,7 +360,7 @@ Il doit :
   - `UNSUPPORTED`
   - `ERROR`
   - `NOT_TESTED`
-- ne faire aucun SNMP SET ;
+- ne faire aucun SNMP SET depuis le module de découverte ;
 - ne modifier aucune configuration réseau ;
 - ne déclarer aucun OID constructeur sans preuve ;
 - fournir des tests unitaires.
@@ -354,7 +378,8 @@ BRIDGE-MIB
   dot1dBasePortIfIndex: SUPPORTED
 
 Q-BRIDGE-MIB
-  dot1qPvid: UNSUPPORTED
+  dot1qTpFdbPort: SUPPORTED (lecture Arista EVE-NG)
+  dot1qPvid: LAB_VALIDATED en GET/SET uniquement pour Arista vEOS 4.29.2F
 
 IP-MIB
   ipNetToPhysicalPhysAddress: SUPPORTED

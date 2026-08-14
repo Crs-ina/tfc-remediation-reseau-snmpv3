@@ -1,0 +1,22 @@
+{
+  "timezone": "Africa/Kinshasa",
+  "supervised_start_time": "08:00",
+  "supervised_end_time": "17:00",
+  "automatic_remediation_enabled": true,
+  "automatic_days": ["saturday", "sunday"],
+  "automatic_allowed_actions": ["SHUTDOWN_PORT", "QUARANTINE_VLAN"],
+  "observe_previous_day_when_holiday_is_sunday": true,
+  "holidays": [
+    {"month": 1, "day": 1, "name": "Nouvel An"},
+    {"month": 1, "day": 4, "name": "Journee des martyrs de l'Independance"},
+    {"month": 1, "day": 16, "name": "Journee du Heros National Laurent-Desire Kabila"},
+    {"month": 1, "day": 17, "name": "Journee du Heros National Patrice-Emery Lumumba"},
+    {"month": 4, "day": 6, "name": "Journee du combat de Simon Kimbangu et de la conscience africaine"},
+    {"month": 5, "day": 1, "name": "Fete du Travail"},
+    {"month": 5, "day": 17, "name": "Journee des Forces Armees"},
+    {"month": 6, "day": 30, "name": "Journee de l'Independance"},
+    {"month": 8, "day": 1, "name": "Fete des Parents"},
+    {"month": 12, "day": 25, "name": "Noel"}
+  ],
+  "extra_holidays": []
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ulc-icam:zabbix-webhook-payload:1.0",
+  "title": "Contrat JSON Webhook Zabbix vers moteur Python ULC-ICAM",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "event",
+    "trigger",
+    "host",
+    "routing",
+    "target_hint",
+    "context"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "source": {"const": "zabbix"},
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "status", "value", "severity", "severity_num", "timestamp"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "minLength": 1},
+        "value": {"type": "integer", "enum": [0, 1]},
+        "severity": {"type": "string", "minLength": 1},
+        "severity_num": {"type": "integer", "minimum": 0, "maximum": 5},
+        "timestamp": {"type": "integer", "minimum": 0}
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "ip"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "ip": {"type": "string", "format": "ipv4"}
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["incident_type"],
+      "properties": {
+        "incident_type": {
+          "oneOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "target_hint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_ip", "client_mac", "interface"],
+      "properties": {
+        "client_ip": {
+          "oneOf": [{"type": "string", "format": "ipv4"}, {"type": "null"}]
+        },
+        "client_mac": {
+          "oneOf": [
+            {"type": "string", "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"},
+            {"type": "null"}
+          ]
+        },
+        "interface": {
+          "oneOf": [{"type": "string", "minLength": 1}, {"type": "null"}]
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["opdata", "tags"],
+      "properties": {
+        "opdata": {"type": "string"},
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tag", "value"],
+            "properties": {
+              "tag": {"type": "string"},
+              "value": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

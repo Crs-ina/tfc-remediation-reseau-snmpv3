@@ -1,0 +1,11 @@
+{
+  "protected_categories": [
+    "critical_access_point",
+    "switch_uplink",
+    "trunk",
+    "management",
+    "router_firewall_gateway",
+    "server"
+  ],
+  "entries": []
+}

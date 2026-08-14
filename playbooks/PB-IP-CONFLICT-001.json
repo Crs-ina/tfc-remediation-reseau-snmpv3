@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "playbook_id": "PB-IP-CONFLICT-001",
+    "title": "Conflit d'adresse IP - quarantaine VLAN 18",
+    "version": "1.1",
+    "status": "prototype"
+  },
+  "incident_type": "ip_address_conflict",
+  "policies": {
+    "target_identification_max_attempts": 2,
+    "remediation_max_attempts": 2,
+    "pre_action_snapshot_required": true,
+    "post_action_verification_required": true,
+    "rollback_automatic": false
+  },
+  "automation": {
+    "allowed_outside_business_hours": true,
+    "periods": ["night", "weekend", "public_holiday"],
+    "never_convert_pending_approval_by_timeout": true
+  },
+  "decision": {
+    "proposed_action": "QUARANTINE_VLAN",
+    "disruptive": true,
+    "required_conditions": [
+      "target_confirmed",
+      "target_not_whitelisted",
+      "quarantine_vlan_exists",
+      "quarantine_vlan_is_fully_isolated",
+      "pre_action_snapshot_saved",
+      "snmp_write_capability_validated"
+    ]
+  },
+  "quarantine": {
+    "vlan_id_source": "QUARANTINE_VLAN_ID",
+    "pvid_change_alone_is_not_proof_of_isolation": true
+  },
+  "rollback": {
+    "automatic": false,
+    "requester": "network_administrator_only"
+  }
+}

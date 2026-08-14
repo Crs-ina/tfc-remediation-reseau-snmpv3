@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "playbook_id": "PB-LOOP-001",
+    "title": "Boucle reseau - shutdown controle du port responsable",
+    "version": "1.1",
+    "status": "prototype"
+  },
+  "incident_type": "network_loop",
+  "policies": {
+    "target_identification_max_attempts": 2,
+    "remediation_max_attempts": 2,
+    "pre_action_snapshot_required": true,
+    "post_action_verification_required": true,
+    "rollback_automatic": false
+  },
+  "automation": {
+    "allowed_outside_business_hours": true,
+    "periods": ["night", "weekend", "public_holiday"],
+    "never_convert_pending_approval_by_timeout": true
+  },
+  "decision": {
+    "proposed_action": "SHUTDOWN_PORT",
+    "disruptive": true,
+    "required_conditions": [
+      "target_confirmed",
+      "target_not_whitelisted",
+      "pre_action_snapshot_saved",
+      "snmp_write_capability_validated"
+    ]
+  },
+  "verification": {
+    "object": "IF-MIB::ifAdminStatus",
+    "expected_value": "down(2)"
+  },
+  "rollback": {
+    "automatic": false,
+    "requester": "network_administrator_only"
+  }
+}
+

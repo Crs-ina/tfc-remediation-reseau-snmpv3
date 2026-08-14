@@ -1,0 +1,335 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from flask import current_app
+from sqlalchemy import func
+
+from app.extensions import db
+from app.models import (
+    AuditLog,
+    Incident,
+    NetworkHost,
+    NetworkSwitch,
+    Remediation,
+    SwitchPort,
+)
+
+from .audit import record_audit
+from .calendar_policy import CalendarPolicy
+from .rules import (
+    PlaybookRepository,
+    RuleContext,
+    RuleDecision,
+    RuleEngine,
+)
+from .whitelist import is_port_protected
+
+
+class RemediationError(ValueError):
+    pass
+
+
+class UnsafeOperationBlocked(RemediationError):
+    pass
+
+
+def evaluate_incident(
+    incident: Incident,
+    *,
+    target_confirmed: bool,
+    target_mac_address: str | None,
+    switch_id: str | None,
+    port_index: int | None,
+    target_ip: str | None = None,
+    port_name: str | None = None,
+    previous_vlan_id: int | None = None,
+    now: datetime | None = None,
+) -> RuleDecision:
+    if incident.processing_status == "WAITING_ADMIN_APPROVAL":
+        raise RemediationError(
+            "L'incident est deja en attente: le passage du temps ne vaut pas autorisation."
+        )
+
+    policy = CalendarPolicy.from_file(current_app.config["AUTOMATION_SCHEDULE_PATH"])
+    schedule = policy.decide(now)
+    identification_attempts = _identification_attempt_count(incident.incident_id)
+    target_whitelisted = False
+    switch_port: SwitchPort | None = None
+    target_host: NetworkHost | None = None
+
+    if target_confirmed:
+        if target_mac_address is None or switch_id is None or port_index is None:
+            raise RemediationError(
+                "Une cible confirmee exige target_mac_address, switch_id et port_index."
+            )
+        switch_port, target_host = _confirm_target_location(
+            target_mac_address=target_mac_address,
+            target_ip=target_ip,
+            switch_id=switch_id,
+            port_index=port_index,
+            port_name=port_name,
+            previous_vlan_id=previous_vlan_id,
+        )
+        target_whitelisted = is_port_protected(
+            current_app.config["WHITELIST_PATH"],
+            switch_id=switch_id,
+            port_index=port_index,
+        )
+    else:
+        identification_attempts = min(identification_attempts + 1, 2)
+        record_audit(
+            incident_id=incident.incident_id,
+            event_type="TARGET_IDENTIFICATION_FAILED",
+            message="La cible n'a pas pu etre confirmee en lecture seule.",
+            equipment_ip=incident.source_ip,
+            incident_type=incident.incident_type,
+            result_status="RETRY" if identification_attempts < 2 else "ESCALATED",
+            details={"attempt": identification_attempts, "maximum": 2},
+        )
+
+    engine = RuleEngine(PlaybookRepository(current_app.config["PLAYBOOKS_DIR"]))
+    decision = engine.evaluate(
+        RuleContext(
+            incident_type=incident.incident_type,
+            target_confirmed=target_confirmed,
+            identification_attempts=identification_attempts,
+            target_whitelisted=target_whitelisted,
+            schedule=schedule,
+            automatic_allowed_actions=policy.schedule.automatic_allowed_actions,
+            quarantine_vlan_exists=current_app.config["QUARANTINE_VLAN_EXISTS"],
+            quarantine_vlan_isolated=current_app.config[
+                "QUARANTINE_VLAN_ISOLATED"
+            ],
+        )
+    )
+
+    previous_state = incident.processing_status
+    incident.processing_status = decision.state
+
+    remediation: Remediation | None = None
+    if (
+        switch_port is not None
+        and target_host is not None
+        and decision.action != "NO_ACTION"
+    ):
+        remediation = _current_or_new_remediation(
+            incident,
+            target_host=target_host,
+            switch_port=switch_port,
+            action_type=decision.action,
+            authorization_mode=(
+                "AUTOMATIC"
+                if decision.execution_mode == "AUTOMATIC"
+                else "SUPERVISED"
+            ),
+        )
+        if decision.execution_mode == "AUTOMATIC":
+            remediation.status = "AUTHORIZED_PENDING_EXECUTION"
+        elif decision.state == "WAITING_ADMIN_APPROVAL":
+            remediation.status = "WAITING_ADMIN_APPROVAL"
+        else:
+            remediation.status = "NOT_AUTHORIZED"
+
+    record_audit(
+        incident_id=incident.incident_id,
+        remediation_id=remediation.remediation_id if remediation else None,
+        event_type="RULE_DECISION",
+        message="Decision du moteur de regles.",
+        equipment_ip=incident.source_ip,
+        port_index=port_index,
+        target_ip=target_ip,
+        target_mac=target_mac_address,
+        incident_type=incident.incident_type,
+        action_type=decision.action,
+        result_status=decision.state,
+        details={
+            "state_before": previous_state,
+            "reason": decision.reason,
+            "execution_mode": decision.execution_mode,
+            "schedule_reason": schedule.reason,
+            "holiday_name": schedule.holiday_name,
+            "target_whitelisted": target_whitelisted,
+            "quarantine_vlan_id": current_app.config["QUARANTINE_VLAN_ID"],
+            "quarantine_vlan_exists": current_app.config[
+                "QUARANTINE_VLAN_EXISTS"
+            ],
+            "quarantine_vlan_isolated": current_app.config[
+                "QUARANTINE_VLAN_ISOLATED"
+            ],
+        },
+    )
+    db.session.commit()
+    return decision
+
+
+def approve_incident(incident: Incident, administrator_id: str) -> Remediation:
+    if incident.processing_status != "WAITING_ADMIN_APPROVAL":
+        raise RemediationError("Seul un incident en attente peut etre approuve.")
+
+    previous_state = incident.processing_status
+    remediation = _latest_remediation_or_fail(incident)
+    remediation.status = "AUTHORIZED_PENDING_EXECUTION"
+    remediation.authorization_mode = "SUPERVISED"
+    incident.processing_status = "ADMIN_APPROVED"
+    record_audit(
+        incident_id=incident.incident_id,
+        remediation_id=remediation.remediation_id,
+        event_type="ADMIN_APPROVED_REMEDIATION",
+        message="L'administrateur a explicitement approuve la remediation.",
+        port_index=remediation.port_index,
+        target_mac=remediation.target_mac_address,
+        incident_type=incident.incident_type,
+        action_type=remediation.action_type,
+        result_status=incident.processing_status,
+        details={
+            "administrator_id": administrator_id,
+            "state_before": previous_state,
+        },
+    )
+    db.session.commit()
+    return remediation
+
+
+def refuse_incident(incident: Incident, administrator_id: str) -> Remediation:
+    if incident.processing_status != "WAITING_ADMIN_APPROVAL":
+        raise RemediationError("Seul un incident en attente peut etre refuse.")
+
+    previous_state = incident.processing_status
+    remediation = _latest_remediation_or_fail(incident)
+    remediation.status = "REJECTED_BY_ADMIN"
+    remediation.authorization_mode = "SUPERVISED"
+    remediation.end_time = datetime.now(timezone.utc)
+    incident.processing_status = "REJECTED_BY_ADMIN"
+    record_audit(
+        incident_id=incident.incident_id,
+        remediation_id=remediation.remediation_id,
+        event_type="ADMIN_REJECTED_REMEDIATION",
+        message="L'administrateur a refuse la remediation.",
+        port_index=remediation.port_index,
+        target_mac=remediation.target_mac_address,
+        incident_type=incident.incident_type,
+        action_type=remediation.action_type,
+        result_status=incident.processing_status,
+        details={
+            "administrator_id": administrator_id,
+            "state_before": previous_state,
+        },
+    )
+    db.session.commit()
+    return remediation
+
+
+def execute_authorized_remediation(incident: Incident):
+    from .snmp_execution import execute_quarantine_vlan
+
+    return execute_quarantine_vlan(incident)
+
+
+def _current_or_new_remediation(
+    incident: Incident,
+    *,
+    target_host: NetworkHost,
+    switch_port: SwitchPort,
+    action_type: str,
+    authorization_mode: str,
+) -> Remediation:
+    if incident.remediations:
+        remediation = incident.remediations[-1]
+        remediation.target_host = target_host
+        remediation.switch_port = switch_port
+        remediation.switch_id = switch_port.switch_id
+        remediation.port_index = switch_port.port_index
+        remediation.action_type = action_type
+        remediation.authorization_mode = authorization_mode
+        return remediation
+    remediation = Remediation(
+        incident=incident,
+        target_host=target_host,
+        switch_port=switch_port,
+        switch_id=switch_port.switch_id,
+        port_index=switch_port.port_index,
+        action_type=action_type,
+        authorization_mode=authorization_mode,
+        status="PROPOSED",
+        previous_port_status=switch_port.status,
+        previous_vlan_id=switch_port.vlan_id,
+    )
+    db.session.add(remediation)
+    return remediation
+
+
+def _record_execution_block(incident: Incident, reason: str) -> None:
+    previous_state = incident.processing_status
+    remediation = _latest_remediation_or_fail(incident)
+    incident.processing_status = "BLOCKED_SNMP_WRITE"
+    remediation.status = "BLOCKED_SNMP_WRITE"
+    remediation.end_time = datetime.now(timezone.utc)
+    record_audit(
+        incident_id=incident.incident_id,
+        remediation_id=remediation.remediation_id,
+        event_type="SNMP_WRITE_BLOCKED",
+        message="Aucune ecriture SNMP n'a ete executee.",
+        port_index=remediation.port_index,
+        target_mac=remediation.target_mac_address,
+        incident_type=incident.incident_type,
+        action_type=remediation.action_type,
+        result_status=incident.processing_status,
+        details={"reason": reason, "state_before": previous_state},
+    )
+    db.session.commit()
+
+
+def _latest_remediation_or_fail(incident: Incident) -> Remediation:
+    if not incident.remediations:
+        raise RemediationError("Aucune remediation ciblee n'est associee a l'incident.")
+    return incident.remediations[-1]
+
+
+def _identification_attempt_count(incident_id: str) -> int:
+    statement = db.select(func.count(AuditLog.log_id)).where(
+        AuditLog.incident_id == incident_id,
+        AuditLog.event_type == "TARGET_IDENTIFICATION_FAILED",
+    )
+    return int(db.session.execute(statement).scalar_one())
+
+
+def _confirm_target_location(
+    *,
+    target_mac_address: str,
+    target_ip: str | None,
+    switch_id: str,
+    port_index: int,
+    port_name: str | None,
+    previous_vlan_id: int | None,
+) -> tuple[SwitchPort, NetworkHost]:
+    network_switch = db.session.get(NetworkSwitch, switch_id)
+    if network_switch is None:
+        raise RemediationError("Le commutateur cible n'existe pas dans l'inventaire.")
+    switch_port = db.session.get(SwitchPort, (switch_id, port_index))
+    if switch_port is None:
+        if not port_name:
+            raise RemediationError(
+                "Le port cible est inconnu et aucun nom SNMP confirme n'est fourni."
+            )
+        switch_port = SwitchPort(
+            network_switch=network_switch,
+            port_index=port_index,
+            port_name=port_name,
+            vlan_id=previous_vlan_id,
+        )
+        db.session.add(switch_port)
+    else:
+        if port_name:
+            switch_port.port_name = port_name
+        if previous_vlan_id is not None:
+            switch_port.vlan_id = previous_vlan_id
+
+    normalized_mac = target_mac_address.strip().lower()
+    target_host = db.session.get(NetworkHost, normalized_mac)
+    if target_host is None:
+        target_host = NetworkHost(mac_address=normalized_mac)
+        db.session.add(target_host)
+    target_host.ip_address = target_ip
+    target_host.switch_port = switch_port
+    return switch_port, target_host

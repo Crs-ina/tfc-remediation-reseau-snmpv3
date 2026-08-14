@@ -1,0 +1,287 @@
+RAPPORT D'ALIGNEMENT STRICT DES MODELES SQLALCHEMY AVEC LE MLD
+Projet : TFC - Remediation reseau Python / SNMPv3
+Date : 13 aout 2026
+
+1. OBJECTIF REALISE
+
+Le projet a ete aligne sur le MLD valide sans ajouter de nouvelle table
+metier, de GUI, de dashboard ou de type d'incident. La base SQLite expose
+maintenant exactement les six tables metier demandees :
+
+- incidents
+- remediations
+- audit_logs
+- network_switches
+- switch_ports
+- network_hosts
+
+La table technique alembic_version reste geree par Alembic et n'est pas une
+table metier.
+
+2. SIX MODELES FINAUX ET ATTRIBUTS EXACTS
+
+Incident / incidents
+- incident_id
+- incident_type
+- severity
+- detected_at
+- source_ip
+- description
+- zabbix_event_id
+- processing_status
+- playbook_id
+
+Remediation / remediations
+- remediation_id
+- incident_id
+- target_mac_address
+- switch_id
+- port_index
+- action_type
+- authorization_mode
+- start_time
+- end_time
+- status
+- previous_port_status
+- previous_vlan_id
+
+AuditLog / audit_logs
+- log_id
+- event_timestamp
+- event_type
+- incident_id
+- remediation_id
+- equipment_name
+- equipment_ip
+- port_index
+- target_ip
+- target_mac
+- incident_type
+- action_type
+- result_status
+- message
+
+NetworkSwitch / network_switches
+- switch_id
+- name
+- management_ip
+- model
+
+SwitchPort / switch_ports
+- switch_id
+- port_index
+- port_name
+- status
+- vlan_id
+
+NetworkHost / network_hosts
+- mac_address
+- ip_address
+- switch_id
+- port_index
+
+3. JUSTIFICATION DES CHAMPS TECHNIQUES DE INCIDENT
+
+Seuls trois attributs supplementaires autorises par les consignes ont ete
+conserves :
+
+- zabbix_event_id : necessaire a l'idempotence du webhook Zabbix ;
+- processing_status : necessaire au suivi du workflow de traitement ;
+- playbook_id : necessaire pour tracer le playbook selectionne par le routage.
+
+Les anciens champs redondants de Incident ont ete retires. Leurs informations
+historiques sont archivees dans AuditLog pendant la migration au lieu de
+surcharger le nouveau modele.
+
+4. RELATIONS SQLALCHEMY ET CLES
+
+- Incident 1 -> 0..* Remediation ;
+- NetworkSwitch 1 -> 0..* SwitchPort ;
+- chaque SwitchPort appartient a un NetworkSwitch ;
+- NetworkHost est localise sur zero ou un SwitchPort ;
+- NetworkHost 1 -> 0..* Remediation ;
+- SwitchPort 1 -> 0..* Remediation ;
+- Incident -> AuditLog est facultatif cote journal ;
+- Remediation -> AuditLog est facultatif cote journal.
+
+La cle primaire de SwitchPort est composee de switch_id + port_index.
+NetworkHost et Remediation utilisent une cle etrangere composite vers cette
+cle. Remediation.reference egalement Incident.incident_id et
+NetworkHost.mac_address. authorization_mode est limite en base a SUPERVISED
+ou AUTOMATIC.
+
+La localisation switch_id/port_index de NetworkHost reste nullable tant que
+la cible n'a pas ete confirmee. Pour les nouvelles remediations, le service
+exige une MAC, un switch et un port valides. Les trois references de cible
+restent techniquement nullables dans Remediation uniquement pour permettre la
+reprise conservatrice d'anciens enregistrements incomplets sans inventer une
+cible reseau.
+
+5. WHITELIST HORS SQLITE
+
+Le modele WhitelistEntry et les fichiers app/models/whitelist.py et
+app/models/equipement.py ont ete supprimes. Le modele Equipement a ete remplace
+par NetworkSwitch.
+
+La whitelist est maintenant lue depuis config/whitelist.json par
+app/services/whitelist.py. Les categories protegees sont conservees : points
+d'acces critiques, uplinks, trunks, management, routeur/pare-feu/passerelle et
+serveurs. Aucun contournement de la whitelist n'a ete ajoute.
+
+La table whitelist_entries est retiree par la migration. Si une ancienne base
+contient encore des entrees, la migration s'arrete explicitement afin d'exiger
+leur export vers le fichier JSON avant suppression.
+
+6. CALENDRIER HORS SQLITE
+
+Le calendrier est defini dans config/automation_schedule.json. Il contient :
+
+- timezone ;
+- supervised_start_time et supervised_end_time ;
+- automatic_days ;
+- holidays et extra_holidays ;
+- activation de l'automatisation ;
+- liste des actions automatiques autorisees.
+
+La politique conserve le mode supervise pendant la plage administrateur et le
+mode automatique confirme par l'utilisateur la nuit, les jours automatiques
+(samedi et dimanche) et les jours feries. Aucun calendrier n'est persiste dans
+SQLite et aucun delai ne transforme une demande en attente en autorisation.
+
+7. VLAN DE QUARANTAINE
+
+Le type d'action est normalise en QUARANTINE_VLAN. Son identifiant provient de
+la configuration unique QUARANTINE_VLAN_ID=18 dans .env.example. Les controles
+QUARANTINE_VLAN_EXISTS et QUARANTINE_VLAN_ISOLATED restent obligatoires.
+
+Le VLAN 18 reste un VLAN experimental du laboratoire EVE-NG. Il doit exister
+et etre totalement isole avant emploi. Une simple modification de PVID n'est
+pas consideree comme une preuve d'isolement.
+
+8. PLAYBOOKS
+
+Les playbooks restent des fichiers JSON dans playbooks/. Aucune table playbook
+n'a ete creee. Les actions sont alignees sur le MLD : SHUTDOWN_PORT,
+QUARANTINE_VLAN et NO_ACTION.
+
+9. POLITIQUE SNMP
+
+La politique SNMP n'a pas ete elargie :
+
+- SNMP_WRITE_ENABLED=false ;
+- SNMP_CAPABILITIES_VALIDATED=false ;
+- client SNMPv3 authPriv limite aux lectures GET et GETNEXT ;
+- aucun set_cmd et aucun SNMP SET implemente ;
+- tentative d'execution bloquee et auditee en phase read-only ;
+- aucun OID constructeur invente.
+
+10. MIGRATION ALEMBIC
+
+La migration initiale migrations/versions/0001_initial.py n'a pas ete
+modifiee. La nouvelle migration est :
+
+migrations/versions/0002_strict_mld_alignment.py
+
+Elle effectue les operations suivantes :
+
+- renomme Equipement/equipements en NetworkSwitch/network_switches ;
+- renomme les identifiants et champs Incident selon le MLD ;
+- cree switch_ports et network_hosts ;
+- adapte remediations avec ses nouvelles cles et attributs ;
+- adapte audit_logs ;
+- archive les anciens champs retires dans AuditLog ;
+- conserve les anciens incidents, remediations et journaux ;
+- refuse de supprimer une ancienne whitelist non exportee ;
+- retire les anciennes structures seulement apres archivage.
+
+Verifications executees :
+
+- migration complete d'une base vide : reussie ;
+- migration d'une base 0001 avec donnees factices : reussie ;
+- incident factice conserve : 1 ;
+- remediation factice conservee : 1 ;
+- anciens details archives dans audit_logs : oui ;
+- flask db check : "No new upgrade operations detected" ;
+- revision finale : 0002_strict_mld (head).
+
+11. TESTS
+
+Les tests couvrent maintenant :
+
+- les six tables exactes et leurs colonnes ;
+- les relations SQLAlchemy et toutes les cles etrangeres ;
+- la cle primaire composee de SwitchPort ;
+- la localisation nullable de NetworkHost ;
+- la whitelist chargee depuis un fichier ;
+- le calendrier charge depuis un fichier ;
+- les jours d'automatisation configurables ;
+- le VLAN 18 configurable ;
+- les regles des quatre playbooks autorises ;
+- l'idempotence et la validation du webhook ;
+- la decouverte SNMPv3 read-only ;
+- l'absence de set_cmd ;
+- le blocage de toute ecriture SNMP, meme apres autorisation automatique.
+
+Commande finale executee :
+
+python -m pytest -q
+
+Resultat final : 27 tests reussis en 1,15 seconde.
+
+12. FICHIERS MODIFIES, AJOUTES OU SUPPRIMES
+
+Configuration et documentation :
+- .env.example
+- config.py
+- config/automation_schedule.json (ajoute)
+- config/whitelist.json (ajoute)
+- README.md
+- docs/architecture.md
+
+Modeles :
+- app/models/__init__.py
+- app/models/incident.py
+- app/models/remediation.py
+- app/models/audit_log.py
+- app/models/network_switch.py (ajoute)
+- app/models/switch_port.py (ajoute)
+- app/models/network_host.py (ajoute)
+- app/models/equipement.py (supprime)
+- app/models/whitelist.py (supprime)
+
+Services, routes et CLI :
+- app/services/audit.py
+- app/services/calendar_policy.py
+- app/services/incident_service.py
+- app/services/remediation.py
+- app/services/rules.py
+- app/services/whitelist.py
+- app/routes/webhook.py
+- app/cli/incidents.py
+- app/cli/remediation.py
+
+Playbooks :
+- playbooks/PB-IP-CONFLICT-001.json
+- playbooks/PB-PHYSICAL-DOWN-001.json
+- playbooks/PB-UNKNOWN-001.json
+
+Migration :
+- migrations/versions/0002_strict_mld_alignment.py (ajoute)
+
+Tests :
+- tests/conftest.py
+- tests/test_calendar_policy.py
+- tests/test_rules.py
+- tests/test_snmp_discovery.py
+- tests/test_mld_models.py (ajoute)
+- tests/test_remediation_service.py (ajoute)
+
+Rapport :
+- RAPPORT_ALIGNEMENT_STRICT_MLD.txt (ajoute)
+
+13. CONFIRMATION FINALE
+
+Les criteres d'acceptation du document d'instructions sont satisfaits : six
+modeles metier persistants, noms et attributs conformes au MLD, whitelist et
+calendrier hors SQLite, playbooks hors base, VLAN 18 configurable, migration
+sans derive et SNMP SET toujours desactive.

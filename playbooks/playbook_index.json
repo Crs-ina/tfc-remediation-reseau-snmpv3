@@ -1,0 +1,22 @@
+{
+  "version": "1.1",
+  "known_incident_types": {
+    "network_loop": {
+      "playbook_id": "PB-LOOP-001",
+      "file": "PB-LOOP-001.json"
+    },
+    "ip_address_conflict": {
+      "playbook_id": "PB-IP-CONFLICT-001",
+      "file": "PB-IP-CONFLICT-001.json"
+    },
+    "physical_disconnection": {
+      "playbook_id": "PB-PHYSICAL-DOWN-001",
+      "file": "PB-PHYSICAL-DOWN-001.json"
+    }
+  },
+  "fallback": {
+    "playbook_id": "PB-UNKNOWN-001",
+    "file": "PB-UNKNOWN-001.json"
+  }
+}
+
