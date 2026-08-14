@@ -7,6 +7,7 @@ from sqlalchemy import inspect
 
 from app.extensions import db
 from app.models import (
+    Administrator,
     AuditLog,
     Incident,
     NetworkHost,
@@ -25,10 +26,11 @@ EXPECTED_TABLES = {
     "switch_ports",
     "network_hosts",
     "network_switches",
+    "administrators",
 }
 
 
-def test_database_contains_exactly_the_six_mld_tables(app):
+def test_database_contains_exactly_the_seven_mld_tables(app):
     with app.app_context():
         assert set(inspect(db.engine).get_table_names()) == EXPECTED_TABLES
 
@@ -66,6 +68,7 @@ def test_mld_column_sets_are_exact(app):
             "event_type",
             "incident_id",
             "remediation_id",
+            "administrator_id",
             "equipment_name",
             "equipment_ip",
             "port_index",
@@ -79,6 +82,7 @@ def test_mld_column_sets_are_exact(app):
         "switch_ports": {"switch_id", "port_index", "port_name", "status", "vlan_id"},
         "network_hosts": {"mac_address", "ip_address", "switch_id", "port_index"},
         "network_switches": {"switch_id", "name", "management_ip", "model"},
+        "administrators": {"administrator_id", "username", "password_hash", "is_active", "created_at", "last_login_at"},
     }
     with app.app_context():
         database = inspect(db.engine)
@@ -143,6 +147,7 @@ def test_mld_foreign_keys_are_present(app):
             "remediations",
             ("remediation_id",),
         ) in audit_keys
+        assert (("administrator_id",), "administrators", ("administrator_id",)) in audit_keys
 
 
 def test_model_relationships_and_foreign_keys(app):
@@ -186,9 +191,11 @@ def test_model_relationships_and_foreign_keys(app):
             previous_port_status="up",
             previous_vlan_id=10,
         )
+        administrator = Administrator(username="operator", password_hash="not-a-password-hash")
         log = AuditLog(
             incident=incident,
             remediation=remediation,
+            administrator=administrator,
             event_type="RULE_DECISION",
             equipment_name=network_switch.name,
             equipment_ip=network_switch.management_ip,
@@ -200,7 +207,7 @@ def test_model_relationships_and_foreign_keys(app):
             result_status=remediation.status,
             message="test",
         )
-        db.session.add_all([network_switch, host, incident, remediation, log])
+        db.session.add_all([network_switch, host, incident, remediation, administrator, log])
         db.session.commit()
 
         assert remediation in incident.remediations
@@ -210,6 +217,7 @@ def test_model_relationships_and_foreign_keys(app):
         assert remediation.switch_port is port
         assert log.incident is incident
         assert log.remediation is remediation
+        assert log.administrator is administrator
 
 
 def test_whitelist_and_schedule_are_external_configuration(tmp_path):

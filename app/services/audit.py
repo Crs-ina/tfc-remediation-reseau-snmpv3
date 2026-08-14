@@ -39,6 +39,7 @@ def record_audit(
     event_type: str,
     message: str,
     remediation_id: str | None = None,
+    administrator_id: str | None = None,
     equipment_name: str | None = None,
     equipment_ip: str | None = None,
     port_index: int | None = None,
@@ -60,6 +61,7 @@ def record_audit(
     entry = AuditLog(
         incident_id=incident_id,
         remediation_id=remediation_id,
+        administrator_id=administrator_id,
         event_type=event_type,
         equipment_name=equipment_name,
         equipment_ip=equipment_ip,

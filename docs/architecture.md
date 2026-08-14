@@ -16,8 +16,8 @@ Zabbix
   -> verification
   -> audit SQLAlchemy / SQLite
 
-Administrateur
-  -> CLI Flask
+Administrator
+  -> OKAPI Flask CLI (authenticated local session)
        -> consulter incidents
        -> evaluer le contexte confirme
        -> approuver ou refuser
@@ -47,8 +47,9 @@ ADMIN_APPROVED / AUTOMATICALLY_AUTHORIZED
 - `routes/` expose HTTP sans logique SNMP.
 - `services/` contient les regles metier et l'audit.
 - `models/` contient la persistance SQLAlchemy.
-- la base contient exactement `incidents`, `remediations`, `audit_logs`,
-  `network_switches`, `switch_ports` et `network_hosts` ;
+- the seven business entities are `incidents`, `remediations`, `audit_logs`,
+  `network_switches`, `switch_ports`, `network_hosts` and `administrators`;
+  `audit_logs.administrator_id` is nullable: `ADMINISTRATOR 1 -> 0..N AUDIT_LOG`.
 - `snmp/` ne contient que les lectures SNMPv3 et la decouverte.
 - `cli/` expose les operations de l'administrateur.
 - `playbooks/` reste la source JSON des regles propres aux incidents.

@@ -6,13 +6,14 @@ from app.extensions import db
 from .incidents import incidents_cli
 from .remediation import remediation_cli
 from .snmp import snmp_cli
+from .okapi import okapi_cli
 
 
 @click.command("init-db")
 def init_db_command() -> None:
-    """Initialisation locale rapide; Flask-Migrate reste la voie de production."""
+    """Initialize the local database; production uses Flask-Migrate."""
     db.create_all()
-    click.echo("Base de donnees initialisee.")
+    click.echo("Database initialized.")
 
 
 def register_cli(app: Flask) -> None:
@@ -20,4 +21,5 @@ def register_cli(app: Flask) -> None:
     app.cli.add_command(incidents_cli)
     app.cli.add_command(remediation_cli)
     app.cli.add_command(snmp_cli)
+    app.cli.add_command(okapi_cli)
 

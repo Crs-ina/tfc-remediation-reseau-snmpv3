@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from flask import current_app
-from sqlalchemy import func
+from sqlalchemy import func, update
 
 from app.extensions import db
 from app.models import (
@@ -31,6 +31,10 @@ class RemediationError(ValueError):
 
 
 class UnsafeOperationBlocked(RemediationError):
+    pass
+
+
+class ConcurrentDecisionError(RemediationError):
     pass
 
 
@@ -163,25 +167,41 @@ def evaluate_incident(
     return decision
 
 
-def approve_incident(incident: Incident, administrator_id: str) -> Remediation:
-    if incident.processing_status != "WAITING_ADMIN_APPROVAL":
-        raise RemediationError("Seul un incident en attente peut etre approuve.")
+def _claim_human_decision(incident: Incident, administrator_id: str, target_state: str) -> None:
+    """SQLite-safe compare-and-set: the first pending decision wins."""
+    result = db.session.execute(
+        update(Incident)
+        .where(Incident.incident_id == incident.incident_id, Incident.processing_status == "WAITING_ADMIN_APPROVAL")
+        .values(processing_status=target_state)
+    )
+    if result.rowcount:
+        db.session.flush()
+        return
+    db.session.expire(incident)
+    db.session.refresh(incident)
+    record_audit(incident_id=incident.incident_id, administrator_id=administrator_id,
+                 event_type="CONCURRENT_DECISION_REJECTED", message="Decision rejected: incident already decided.",
+                 result_status="REJECTED", details={"current_status": incident.processing_status})
+    db.session.commit()
+    raise ConcurrentDecisionError(f"Decision rejected. This incident has already been {incident.processing_status}.")
 
-    previous_state = incident.processing_status
+
+def approve_incident(incident: Incident, administrator_id: str) -> Remediation:
+    _claim_human_decision(incident, administrator_id, "ADMIN_APPROVED")
+    previous_state = "WAITING_ADMIN_APPROVAL"
     remediation = _latest_remediation_or_fail(incident)
     remediation.status = "AUTHORIZED_PENDING_EXECUTION"
     remediation.authorization_mode = "SUPERVISED"
-    incident.processing_status = "ADMIN_APPROVED"
     record_audit(
         incident_id=incident.incident_id,
         remediation_id=remediation.remediation_id,
-        event_type="ADMIN_APPROVED_REMEDIATION",
-        message="L'administrateur a explicitement approuve la remediation.",
+        administrator_id=administrator_id, event_type="REMEDIATION_APPROVED",
+        message="Administrator explicitly approved remediation.",
         port_index=remediation.port_index,
         target_mac=remediation.target_mac_address,
         incident_type=incident.incident_type,
         action_type=remediation.action_type,
-        result_status=incident.processing_status,
+        result_status="ADMIN_APPROVED",
         details={
             "administrator_id": administrator_id,
             "state_before": previous_state,
@@ -192,25 +212,22 @@ def approve_incident(incident: Incident, administrator_id: str) -> Remediation:
 
 
 def refuse_incident(incident: Incident, administrator_id: str) -> Remediation:
-    if incident.processing_status != "WAITING_ADMIN_APPROVAL":
-        raise RemediationError("Seul un incident en attente peut etre refuse.")
-
-    previous_state = incident.processing_status
+    _claim_human_decision(incident, administrator_id, "REJECTED_BY_ADMIN")
+    previous_state = "WAITING_ADMIN_APPROVAL"
     remediation = _latest_remediation_or_fail(incident)
     remediation.status = "REJECTED_BY_ADMIN"
     remediation.authorization_mode = "SUPERVISED"
     remediation.end_time = datetime.now(timezone.utc)
-    incident.processing_status = "REJECTED_BY_ADMIN"
     record_audit(
         incident_id=incident.incident_id,
         remediation_id=remediation.remediation_id,
-        event_type="ADMIN_REJECTED_REMEDIATION",
-        message="L'administrateur a refuse la remediation.",
+        administrator_id=administrator_id, event_type="REMEDIATION_REFUSED",
+        message="Administrator refused remediation.",
         port_index=remediation.port_index,
         target_mac=remediation.target_mac_address,
         incident_type=incident.incident_type,
         action_type=remediation.action_type,
-        result_status=incident.processing_status,
+        result_status="REJECTED_BY_ADMIN",
         details={
             "administrator_id": administrator_id,
             "state_before": previous_state,

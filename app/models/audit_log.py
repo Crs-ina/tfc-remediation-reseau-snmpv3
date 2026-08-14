@@ -14,6 +14,7 @@ from .base import utc_now
 if TYPE_CHECKING:
     from .incident import Incident
     from .remediation import Remediation
+    from .administrator import Administrator
 
 
 class AuditLog(db.Model):
@@ -32,6 +33,9 @@ class AuditLog(db.Model):
     remediation_id: Mapped[str | None] = mapped_column(
         ForeignKey("remediations.remediation_id", ondelete="SET NULL"), index=True
     )
+    administrator_id: Mapped[str | None] = mapped_column(
+        ForeignKey("administrators.administrator_id", ondelete="SET NULL"), index=True
+    )
     equipment_name: Mapped[str | None] = mapped_column(String(255))
     equipment_ip: Mapped[str | None] = mapped_column(String(45))
     port_index: Mapped[int | None] = mapped_column(Integer)
@@ -46,6 +50,7 @@ class AuditLog(db.Model):
     remediation: Mapped["Remediation | None"] = relationship(
         back_populates="audit_logs"
     )
+    administrator: Mapped["Administrator | None"] = relationship(back_populates="audit_logs")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -54,6 +59,7 @@ class AuditLog(db.Model):
             "event_type": self.event_type,
             "incident_id": self.incident_id,
             "remediation_id": self.remediation_id,
+            "administrator_id": self.administrator_id,
             "equipment_name": self.equipment_name,
             "equipment_ip": self.equipment_ip,
             "port_index": self.port_index,

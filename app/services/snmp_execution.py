@@ -295,8 +295,9 @@ def rollback_quarantine_vlan(
     record_audit(
         incident_id=incident.incident_id,
         remediation_id=remediation.remediation_id,
-        event_type="SNMP_ROLLBACK_SUCCEEDED",
-        message="Rollback explicite confirme par GET vers previous_pvid.",
+        administrator_id=administrator_id,
+        event_type="ROLLBACK_REQUESTED",
+        message="Explicit rollback confirmed by GET against previous PVID.",
         equipment_name=network_switch.name,
         equipment_ip=network_switch.management_ip,
         port_index=remediation.port_index,
@@ -305,7 +306,6 @@ def rollback_quarantine_vlan(
         action_type=remediation.action_type,
         result_status="ROLLED_BACK",
         details={
-            "administrator_id": administrator_id,
             "previous_pvid": previous_pvid,
             "observed_pvid": observed,
         },

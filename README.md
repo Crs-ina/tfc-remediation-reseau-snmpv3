@@ -1,4 +1,28 @@
-# TFC — Remédiation réseau SNMPv3
+# OKAPI — SNMPv3 network remediation
+
+**OKAPI** (Orchestrateur de Kimwenza Automatisé pour la Protection et
+l’Automatisation) is a CLI-only administrator interface for the existing
+SNMPv3 remediation engine. It keeps the Flask/SQLite architecture, local MIB
+package, calendar policy and guarded Arista laboratory write path intact.
+
+## Administrator interface
+
+Run the interactive interface on the remediation server:
+
+```powershell
+flask --app run.py okapi
+```
+
+It displays the ASCII OKAPI banner, offers protected account creation and
+login, then retains the authenticated administrator only for that CLI process.
+The normal menu uses numbered incident selections rather than internal IDs.
+Approve/Refuse decisions and requested rollbacks are linked to the logged-in
+administrator in `audit_logs`. Passwords are stored only as Werkzeug password
+hashes.
+
+Advanced maintenance commands remain available separately. Incident and audit
+searches support `--from "YYYY-MM-DD HH:MM"` and `--to "YYYY-MM-DD HH:MM"`,
+interpreted in `Africa/Kinshasa`.
 
 Prototype Flask de traitement d’incidents réseau avec découverte SNMPv3 en
 lecture seule et remédiation VLAN strictement contrôlée.
