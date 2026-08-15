@@ -35,3 +35,6 @@ instance/
 data/*.db
 data/*.sqlite
 *.log
+
+# Packaging Python
+*.egg-info/

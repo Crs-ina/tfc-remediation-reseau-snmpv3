@@ -148,7 +148,8 @@ def okapi(ctx: click.Context) -> None:
         return
     _banner()
     while True:
-        choice = click.prompt("[1] Login  [2] Create administrator account  [0] Exit", default="0").strip()
+        choice = click.prompt("[1] Login  [2] Create administrator account  [0] Exit", default="", show_default=False).strip()
+        if not choice: continue
         if choice == "0": return
         if choice == "2": _create_account(); continue
         if choice != "1": click.echo("Invalid selection."); continue
@@ -161,16 +162,16 @@ def okapi(ctx: click.Context) -> None:
         click.echo(f"Login successful. Welcome, {administrator.username}.")
         _banner(administrator.username)
         while True:
-            choice = click.prompt("[1] Pending incidents [2] Incident history [3] Audit logs [4] Successful remediations / rollback [5] SNMPv3 read-only discovery [6] Account [7] Logout [0] Exit", default="0").strip()
+            choice = click.prompt("[1] Pending incidents [2] Incident history [3] Audit logs [4] Successful remediations / rollback [5] Account [6] Logout [0] Exit", default="", show_default=False).strip()
+            if not choice: continue
             if choice == "0": return
             if choice == "1": _pending(administrator)
             elif choice == "2": _history()
             elif choice == "3": _logs()
             elif choice == "4": _rollback(administrator)
-            elif choice == "5": click.echo("SNMPv3 read-only discovery is available through the advanced 'snmp discover' command.")
-            elif choice == "6":
+            elif choice == "5":
                 click.echo(f"Username: {administrator.username}\nStatus: {'Active' if administrator.is_active else 'Inactive'}\nCreated at: {local_time(administrator.created_at)}\nLast login: {local_time(administrator.last_login_at)}")
-            elif choice == "7": click.echo("Logged out."); break
+            elif choice == "6": click.echo("Logged out."); break
             else: click.echo("Invalid selection.")
 
 
