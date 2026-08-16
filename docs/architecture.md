@@ -15,6 +15,7 @@ Zabbix
   -> service de remediation
   -> verification
   -> audit SQLAlchemy / SQLite
+  -> persistent CLI attention summary
 
 Administrator
   -> OKAPI Flask CLI (authenticated local session)
@@ -25,7 +26,8 @@ Administrator
 
 Application
   -> client PySNMP authPriv read-only
-  -> switch Cisco dans EVE-NG
+  -> guarded remediation client
+  -> Arista vEOS 4.29.2F in EVE-NG
 ```
 
 ## Etats principaux
@@ -39,7 +41,12 @@ RECEIVED -> ROUTED -> IDENTIFYING_TARGET
                     -> AUTOMATICALLY_AUTHORIZED
 
 ADMIN_APPROVED / AUTOMATICALLY_AUTHORIZED
-  -> BLOCKED_SNMP_WRITE pendant la phase read-only
+  -> REMEDIATION_IN_PROGRESS
+  -> VERIFYING
+  -> REMEDIATED / FAILED / BLOCKED_SNMP_CAPABILITY / COOLDOWN_BLOCKED
+
+WAITING_ADMIN_APPROVAL + Zabbix recovery
+  -> RECOVERED_BEFORE_ACTION (no SET)
 ```
 
 ## Separation des responsabilites
@@ -63,3 +70,19 @@ une preuve que l'equipement supporte l'action. L'execution exige encore les
 capacites d'ecriture validees, une sauvegarde pre-action et un controle
 post-action. Le passage d'un incident de jour vers la nuit ne transforme pas
 une demande en attente en approbation.
+
+Outside the supervised window, only `SHUTDOWN_PORT` and `QUARANTINE_VLAN`
+may be pre-authorized by the external calendar. `REACTIVATE_PORT` remains
+always supervised. Every write path still applies target confirmation,
+whitelist, capability, snapshot, cooldown, per-port serialization, at most two
+SET attempts and GET verification.
+
+## Seven playbook routes
+
+`physical_disconnection`, `network_loop`, `ip_address_conflict`,
+`interface_admin_down`, `port_flapping`, `vlan_policy_violation`, and the
+UNKNOWN fallback are routed through canonical JSON playbooks. UNKNOWN and
+physical disconnection are `NO_ACTION`; neither can reach an SNMP SET.
+
+SNMPv3 TRAP/INFORM enters the Zabbix receiver chain, never a parallel Python
+detector. Zabbix then sends the existing authenticated JSON webhook to OKAPI.

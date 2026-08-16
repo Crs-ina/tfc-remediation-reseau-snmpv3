@@ -16,17 +16,17 @@ from app.services.remediation import (
     execute_authorized_remediation,
     refuse_incident,
 )
-from app.services.snmp_execution import rollback_quarantine_vlan
-from app.services.snmp_preparation import prepare_incident_with_snmp
+from app.services.snmp_execution import rollback_snmp_action
+from app.services.snmp_preparation import prepare_incident_with_snmp, prepare_port_incident_with_snmp
 
 
-remediation_cli = AppGroup("remediation", help="Evaluer et autoriser une remediation.")
+remediation_cli = AppGroup("remediation", help="Advanced remediation maintenance commands.")
 
 
 def _incident_or_fail(incident_id: str) -> Incident:
     incident = db.session.get(Incident, incident_id)
     if incident is None:
-        raise click.ClickException("Incident introuvable.")
+        raise click.ClickException("Incident not found.")
     return incident
 
 
@@ -46,11 +46,9 @@ def evaluate_command(
     port_index: int | None,
 ) -> None:
     incident = _incident_or_fail(incident_id)
-    if target_confirmed and (
-        target_mac is None or switch_id is None or port_index is None
-    ):
+    if target_confirmed and (switch_id is None or port_index is None):
         raise click.ClickException(
-            "--target-mac, --switch-id et --port-index sont requis pour une cible confirmee."
+            "--switch-id and --port-index are required for a confirmed target."
         )
     try:
         decision = evaluate_incident(
@@ -68,7 +66,7 @@ def evaluate_command(
 
 @remediation_cli.command("approve")
 @click.argument("incident_id")
-@click.option("--administrator", required=True, help="Identifiant de l'administrateur.")
+@click.option("--administrator", required=True, help="Administrator identifier for advanced maintenance only.")
 def approve_command(incident_id: str, administrator: str) -> None:
     try:
         remediation = approve_incident(_incident_or_fail(incident_id), administrator)
@@ -100,9 +98,31 @@ def prepare_snmp_command(
     click.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False))
 
 
+@remediation_cli.command("prepare-port")
+@click.argument("incident_id")
+@click.option("--switch-id", required=True)
+@click.option("--bridge-port", required=True, type=int)
+@click.option("--interface-hint")
+@click.option("--target-mac")
+@click.option("--target-ip")
+def prepare_port_command(incident_id: str, switch_id: str, bridge_port: int,
+                         interface_hint: str | None, target_mac: str | None,
+                         target_ip: str | None) -> None:
+    """Confirm a port-centric target through read-only SNMP checks."""
+    try:
+        result = prepare_port_incident_with_snmp(
+            _incident_or_fail(incident_id), switch_id=switch_id,
+            bridge_port=bridge_port, interface_hint=interface_hint,
+            target_mac=target_mac, target_ip=target_ip,
+        )
+    except RemediationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False))
+
+
 @remediation_cli.command("refuse")
 @click.argument("incident_id")
-@click.option("--administrator", required=True, help="Identifiant de l'administrateur.")
+@click.option("--administrator", required=True, help="Administrator identifier for advanced maintenance only.")
 def refuse_command(incident_id: str, administrator: str) -> None:
     try:
         remediation = refuse_incident(_incident_or_fail(incident_id), administrator)
@@ -126,9 +146,9 @@ def execute_command(incident_id: str) -> None:
 @click.option("--administrator", required=True)
 def rollback_command(incident_id: str, administrator: str) -> None:
     try:
-        observed_pvid = rollback_quarantine_vlan(
+        observed_pvid = rollback_snmp_action(
             _incident_or_fail(incident_id), administrator_id=administrator
         )
     except (RemediationError, UnsafeOperationBlocked) as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps({"observed_pvid": observed_pvid}, indent=2))
+    click.echo(json.dumps({"observed_value": observed_pvid}, indent=2))

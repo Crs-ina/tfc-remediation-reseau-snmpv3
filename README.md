@@ -7,10 +7,11 @@ package, calendar policy and guarded Arista laboratory write path intact.
 
 ## Administrator interface
 
-Run the interactive interface on the remediation server:
+Install the package and run the interactive interface directly:
 
-```powershell
-flask --app run.py okapi
+```bash
+python -m pip install -e .
+okapi
 ```
 
 It displays the ASCII OKAPI banner, offers protected account creation and
@@ -29,29 +30,38 @@ lecture seule et remédiation VLAN strictement contrôlée.
 
 ## Périmètre
 
-Le projet traite les quatre routes de playbook existantes :
+Le projet traite exactement sept routes fonctionnelles :
 
 - `network_loop` → `PB-LOOP-001` ;
 - `ip_address_conflict` → `PB-IP-CONFLICT-001` ;
 - `physical_disconnection` → `PB-PHYSICAL-DOWN-001` ;
+- `interface_admin_down` → `PB-INTERFACE-DOWN-001` ;
+- `port_flapping` → `PB-PORT-FLAPPING-001` ;
+- `vlan_policy_violation` → `PB-VLAN-POLICY-001` ;
 - tout autre type → `PB-UNKNOWN-001`.
 
-La seule écriture SNMP implémentée est :
+Les chemins d'écriture implémentés utilisent :
 
 ```text
 Q-BRIDGE-MIB::dot1qPvid.<bridge_port>
+IF-MIB::ifAdminStatus.<ifIndex>
 ```
 
-Elle est marquée `LAB_VALIDATED` uniquement pour **Arista vEOS 4.29.2F**
+Seul `dot1qPvid` est marqué `LAB_VALIDATED`, uniquement pour **Arista vEOS 4.29.2F**
 dans EVE-NG, avec SNMPv3 `authPriv`, SHA-256 et AES-256. UniFi reste
-`TO_BE_VALIDATED` et toute écriture y est bloquée.
+`TO_BE_VALIDATED` et toute écriture y est bloquée. Les SET `ifAdminStatus`
+down/up sont implémentés derrière le capability gate mais restent également
+`TO_BE_VALIDATED` : ils ne sont donc pas envoyés tant qu'un essai réel ne les
+qualifie pas.
 
 ## Politique de sécurité
 
 - La découverte utilise uniquement le client `SnmpReadClient`.
 - Aucune communauté SNMPv1/SNMPv2c n’est acceptée.
-- Tout changement disruptif exige une approbation humaine explicite, quelle
-  que soit l’heure.
+- De 08:00 à 17:00 (`Africa/Kinshasa`), toute action disruptive attend une
+  décision humaine. Hors plage, seuls `SHUTDOWN_PORT` et `QUARANTINE_VLAN`
+  peuvent être préautorisés par le calendrier ; `REACTIVATE_PORT` reste
+  toujours supervisé et une attente existante ne se convertit jamais.
 - `SNMP_WRITE_ENABLED=false` par défaut.
 - Le modèle, l’objet et les protocoles doivent correspondre exactement au
   profil `LAB_VALIDATED` de `config/snmp_capabilities.json`.
@@ -60,6 +70,9 @@ dans EVE-NG, avec SNMPv3 `authPriv`, SHA-256 et AES-256. UniFi reste
 - Le PVID est relu après l’approbation et doit encore correspondre au snapshot
   pré-action.
 - Le SET vers le VLAN 18 n’est déclaré réussi qu’après un GET égal à 18.
+- Deux tentatives maximum sont permises, un cooldown de 60 secondes et un
+  verrou inter-processus sérialisent les actions sur un même port.
+- `DRY_RUN=true` exécute le parcours sans aucun SNMP SET.
 - Le rollback n’est jamais automatique : un administrateur doit le demander,
   puis un SET remet le `previous_pvid` et un GET le vérifie.
 - Les clés d’authentification et de confidentialité sont masquées dans les
@@ -147,7 +160,7 @@ SNMP_WRITE_ENABLED=true
 
 ```powershell
 flask --app run.py db upgrade
-flask --app run.py run --host 127.0.0.1 --port 8000
+flask --app run.py run --host 127.0.0.1 --port 5000
 ```
 
 Pour une initialisation locale rapide seulement :
@@ -161,7 +174,12 @@ Points d’entrée :
 - `GET /health` ;
 - `POST /api/v1/incidents/zabbix` avec l’en-tête `X-Webhook-Token`.
 
-## Procédure CLI recommandée
+## Interface et maintenance
+
+L'interface quotidienne est `okapi`. Elle couvre les incidents, décisions,
+historique, audit, rollback, état du système et gestion minimale des comptes,
+sans afficher les identifiants internes. Les commandes Flask suivantes restent
+des outils avancés de maintenance.
 
 La commande `prepare-snmp` effectue l’identification, les préconditions et le
 snapshot avant l’approbation :

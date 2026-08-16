@@ -1,0 +1,7 @@
+# Secret-free receiver template. Create the SNMPv3 USM user locally in
+# /var/lib/snmp/snmptrapd.conf; never commit its authentication/privacy keys.
+authUser log OKAPI_TRAP_USER priv
+format1 OKAPI-ZABBIX %V\n%v\n
+format2 OKAPI-ZABBIX %V\n%v\n
+outputOption n
+logOption f /var/log/snmptrap/snmptrap.log

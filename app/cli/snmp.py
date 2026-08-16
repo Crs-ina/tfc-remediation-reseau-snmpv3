@@ -10,11 +10,11 @@ from app.snmp.client import SnmpReadClient, SnmpV3Config
 from app.snmp.discovery import discover_snmp_capabilities_sync
 
 
-snmp_cli = AppGroup("snmp", help="Decouverte SNMPv3 strictement read-only.")
+snmp_cli = AppGroup("snmp", help="SNMPv3 read-only discovery.")
 
 
 @snmp_cli.command("discover")
-@click.option("--host", default=None, help="Remplace SNMP_HOST pour cette execution.")
+@click.option("--host", default=None, help="Override SNMP_HOST for this execution.")
 def discover_command(host: str | None) -> None:
     try:
         config = SnmpV3Config.from_env(host=host)
