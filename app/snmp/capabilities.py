@@ -47,22 +47,22 @@ def require_lab_validated_write(
     priv_protocol: str,
 ) -> PlatformCapabilities:
     if not model:
-        raise CapabilityError("Modele du switch absent: ecriture interdite.")
+        raise CapabilityError("Switch model is missing; writes are forbidden.")
     platform = load_capabilities(Path(path)).get(model)
     if platform is None:
         raise CapabilityError(
-            f"Plateforme non qualifiee pour l'ecriture SNMP: {model}"
+            f"Platform is not qualified for SNMP writes: {model}"
         )
     if platform.write_status(symbolic_name) != "LAB_VALIDATED":
         raise CapabilityError(
-            f"Capacite d'ecriture non LAB_VALIDATED pour {model}: {symbolic_name}"
+            f"Write capability is not LAB_VALIDATED for {model}: {symbolic_name}"
         )
     if (
         platform.auth_protocol != auth_protocol
         or platform.priv_protocol != priv_protocol
     ):
         raise CapabilityError(
-            "Les protocoles SNMP ne correspondent pas au profil valide "
+            "SNMP protocols do not match the validated profile "
             f"({platform.auth_protocol}/{platform.priv_protocol})."
         )
     return platform

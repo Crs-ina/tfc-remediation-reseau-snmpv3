@@ -55,4 +55,23 @@ def change_password(administrator: Administrator, password: str) -> None:
     if not password:
         raise ValueError("Password cannot be empty.")
     administrator.password_hash = generate_password_hash(password)
+    record_audit(incident_id=None, administrator_id=administrator.administrator_id,
+                 event_type="ADMIN_PASSWORD_CHANGED", message="Administrator changed own password.", result_status="SUCCESS")
     db.session.commit()
+
+
+def list_administrators() -> list[Administrator]:
+    return list(db.session.execute(db.select(Administrator).order_by(Administrator.username)).scalars())
+
+
+def disable_administrator(actor: Administrator, username: str) -> Administrator:
+    target = db.session.execute(db.select(Administrator).where(Administrator.username == username.strip())).scalar_one_or_none()
+    if target is None:
+        raise ValueError("Administrator not found.")
+    if target.administrator_id == actor.administrator_id:
+        raise ValueError("You cannot disable your current session account.")
+    target.is_active = False
+    record_audit(incident_id=None, administrator_id=actor.administrator_id,
+                 event_type="ADMIN_ACCOUNT_DISABLED", message=f"Administrator account disabled: {target.username}.", result_status="SUCCESS")
+    db.session.commit()
+    return target

@@ -1,0 +1,10 @@
+{
+  "metadata": {"playbook_id": "PB-VLAN-POLICY-001", "title": "VLAN policy violation containment", "version": "1.0", "status": "prototype"},
+  "incident_type": "vlan_policy_violation",
+  "policies": {"target_identification_max_attempts": 2, "remediation_max_attempts": 2, "pre_action_snapshot_required": true, "post_action_verification_required": true, "rollback_automatic": false},
+  "authorization": {"human_validation_policy": "mandatory_in_supervised_mode", "authorization_policy": "calendar_controlled", "approval_timeout": null, "waiting_request_never_auto_converts": true},
+  "automation": {"allowed_outside_business_hours": true, "periods": ["night", "weekend", "public_holiday"]},
+  "decision": {"proposed_action": "QUARANTINE_VLAN", "disruptive": true, "required_conditions": ["switch_confirmed", "port_confirmed", "pvid_confirmed", "target_not_whitelisted", "quarantine_vlan_exists", "quarantine_vlan_is_fully_isolated", "pre_action_snapshot_saved", "snmp_write_capability_validated"]},
+  "quarantine": {"vlan_id_source": "QUARANTINE_VLAN_ID", "pvid_change_alone_is_not_proof_of_isolation": true},
+  "rollback": {"automatic": false, "restore": "previous_vlan_id", "requester": "network_administrator_only"}
+}

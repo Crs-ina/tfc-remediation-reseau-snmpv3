@@ -35,10 +35,10 @@ def evaluate(**overrides):
     return engine.evaluate(RuleContext(**values))
 
 
-def test_disruptive_loop_always_requires_human_approval():
+def test_shutdown_is_pre_authorized_in_automatic_window():
     decision = evaluate()
-    assert decision.state == "WAITING_ADMIN_APPROVAL"
-    assert decision.execution_mode == "HUMAN_APPROVAL"
+    assert decision.state == "AUTOMATICALLY_AUTHORIZED"
+    assert decision.execution_mode == "AUTOMATIC"
     assert decision.action == "SHUTDOWN_PORT"
 
 
@@ -61,6 +61,13 @@ def test_ip_conflict_requires_isolated_quarantine_vlan():
         quarantine_vlan_exists=True,
         quarantine_vlan_isolated=True,
     )
+    assert decision.state == "AUTOMATICALLY_AUTHORIZED"
+    assert decision.execution_mode == "AUTOMATIC"
+
+
+def test_reactivate_port_is_always_supervised():
+    decision = evaluate(incident_type="interface_admin_down")
+    assert decision.action == "REACTIVATE_PORT"
     assert decision.state == "WAITING_ADMIN_APPROVAL"
     assert decision.execution_mode == "HUMAN_APPROVAL"
 

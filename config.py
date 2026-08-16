@@ -75,6 +75,10 @@ class Config:
     QUARANTINE_VLAN_ID = int(os.getenv("QUARANTINE_VLAN_ID", "18"))
 
     SNMP_WRITE_ENABLED = env_bool("SNMP_WRITE_ENABLED", False)
+    DRY_RUN = env_bool("DRY_RUN", False)
+    REMEDIATION_MAX_ATTEMPTS = int(os.getenv("REMEDIATION_MAX_ATTEMPTS", "2"))
+    REMEDIATION_COOLDOWN_SECONDS = int(os.getenv("REMEDIATION_COOLDOWN_SECONDS", "60"))
+    PORT_LOCK_DIR = config_path("PORT_LOCK_DIR", "data/port-locks")
     SNMP_MIB_PACKAGE = os.getenv("SNMP_MIB_PACKAGE", "pysnmp_mibs").strip()
     SNMP_MIB_PATH = optional_config_path("SNMP_MIB_PATH")
     SNMP_CAPABILITIES_PATH = config_path(

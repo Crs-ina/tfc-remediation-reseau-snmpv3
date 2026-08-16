@@ -10,6 +10,7 @@
       "objects": {
         "SNMPv2-MIB::sysName": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
         "IF-MIB::ifDescr": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
+        "IF-MIB::ifAdminStatus": {"read": "SUPPORTED", "write": "TO_BE_VALIDATED"},
         "BRIDGE-MIB::dot1dBasePortIfIndex": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
         "Q-BRIDGE-MIB::dot1qTpFdbPort": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
         "Q-BRIDGE-MIB::dot1qPvid": {"read": "SUPPORTED", "write": "LAB_VALIDATED"}
@@ -22,6 +23,7 @@
         "priv_protocol": "TO_BE_VALIDATED"
       },
       "objects": {
+        "IF-MIB::ifAdminStatus": {"read": "TO_BE_VALIDATED", "write": "TO_BE_VALIDATED"},
         "Q-BRIDGE-MIB::dot1qPvid": {"read": "TO_BE_VALIDATED", "write": "TO_BE_VALIDATED"}
       }
     }

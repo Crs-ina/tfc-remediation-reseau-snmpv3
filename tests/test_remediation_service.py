@@ -33,7 +33,7 @@ def test_human_approval_creates_targeted_remediation_but_feature_flag_blocks_wri
         incident = Incident(
             incident_type="network_loop",
             severity="High",
-            detected_at=datetime(2026, 8, 10, 22, 0, tzinfo=ZoneInfo("Africa/Kinshasa")),
+            detected_at=datetime(2026, 8, 10, 10, 0, tzinfo=ZoneInfo("Africa/Kinshasa")),
             source_ip="192.0.2.10",
             description="Boucle detectee",
             zabbix_event_id="evt-remediation-1",
@@ -50,7 +50,7 @@ def test_human_approval_creates_targeted_remediation_but_feature_flag_blocks_wri
             target_ip="192.0.2.50",
             switch_id="sw-1",
             port_index=4,
-            now=datetime(2026, 8, 10, 22, 0, tzinfo=ZoneInfo("Africa/Kinshasa")),
+            now=datetime(2026, 8, 10, 10, 0, tzinfo=ZoneInfo("Africa/Kinshasa")),
         )
 
         remediation = db.session.execute(db.select(Remediation)).scalar_one()

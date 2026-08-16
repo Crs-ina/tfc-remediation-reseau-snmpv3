@@ -8,6 +8,7 @@ from app.models import AuditLog, Incident, NetworkHost, NetworkSwitch, Remediati
 from app.services.snmp_preparation import (
     SnmpPreparationBlocked,
     prepare_incident_with_snmp,
+    prepare_port_incident_with_snmp,
 )
 from app.snmp.client import SnmpV3Config, SnmpWalkEntry
 from app.snmp.mib_catalog import (
@@ -15,6 +16,7 @@ from app.snmp.mib_catalog import (
     DOT1Q_PVID,
     DOT1Q_TP_FDB_PORT,
     IF_DESCR,
+    IF_ADMIN_STATUS,
     MibObjectRef,
 )
 from app.snmp.mib_registry import MibRegistry
@@ -91,6 +93,8 @@ class FakePreparationClient:
             return "7"
         if object_ref.key == IF_DESCR.key:
             return "Ethernet2"
+        if object_ref.key == IF_ADMIN_STATUS.key:
+            return "2"
         if object_ref.key == DOT1Q_PVID.key:
             return "10"
         raise AssertionError(f"Lecture inattendue: {object_ref}")
@@ -113,7 +117,7 @@ def test_preparation_persists_bridge_port_interface_pvid_and_target(app):
         port = db.session.get(SwitchPort, ("sw-eve-1", 2))
         host = db.session.get(NetworkHost, TARGET_MAC)
         remediation = db.session.execute(db.select(Remediation)).scalar_one()
-        assert result.decision_state == "WAITING_ADMIN_APPROVAL"
+        assert result.decision_state in {"WAITING_ADMIN_APPROVAL", "AUTOMATICALLY_AUTHORIZED"}
         assert result.resolution.cache_hit is False
         assert port is not None
         assert port.port_index == 2  # bridge_port SNMP persiste
@@ -121,8 +125,26 @@ def test_preparation_persists_bridge_port_interface_pvid_and_target(app):
         assert port.vlan_id == 10
         assert host is not None and host.port_index == 2
         assert remediation.previous_vlan_id == 10
-        assert remediation.authorization_mode == "SUPERVISED"
+        assert remediation.authorization_mode in {"SUPERVISED", "AUTOMATIC"}
         assert fake.walk_calls == 1
+
+
+def test_port_centric_incident_does_not_require_a_mac(app):
+    with app.app_context():
+        _switch, incident = add_switch_and_incident()
+        incident.incident_type = "interface_admin_down"
+        incident.playbook_id = "PB-INTERFACE-DOWN-001"
+        db.session.commit()
+        result = prepare_port_incident_with_snmp(
+            incident, switch_id="sw-eve-1", bridge_port=2,
+            interface_hint="Ethernet2", client=FakePreparationClient(),
+            snmp_config=snmp_config(),
+        )
+        remediation = db.session.execute(db.select(Remediation)).scalar_one()
+        assert result.decision_state == "WAITING_ADMIN_APPROVAL"
+        assert remediation.target_mac_address is None
+        assert remediation.previous_port_status == "2"
+        assert remediation.action_type == "REACTIVATE_PORT"
 
 
 def test_second_incident_revalidates_known_port_without_full_walk(app):

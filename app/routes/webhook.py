@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request
 
-from app.services.incident_service import register_incident, tag_value
+from app.services.incident_service import register_incident, register_recovery, tag_value
 from app.services.payload_validation import validate_payload
 from app.services.security import AuthenticationError, verify_webhook_token
 
@@ -43,11 +43,16 @@ def receive_zabbix_incident():
         )
 
     if payload["event"]["value"] != 1 or payload["event"]["status"].upper() != "PROBLEM":
+        recovered = register_recovery(payload)
         return jsonify(
             {
                 "ok": True,
                 "ignored": True,
-                "reason": "not_a_problem_event",
+                "reason": (
+                    "recovered_before_action"
+                    if recovered and recovered.processing_status == "RECOVERED_BEFORE_ACTION"
+                    else "not_a_problem_event"
+                ),
                 "zabbix_event_id": payload["event"]["id"],
             }
         )

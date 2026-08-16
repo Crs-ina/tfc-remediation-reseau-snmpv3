@@ -1,0 +1,10 @@
+{
+  "metadata": {"playbook_id": "PB-PORT-FLAPPING-001", "title": "Port flapping containment", "version": "1.0", "status": "prototype"},
+  "incident_type": "port_flapping",
+  "policies": {"target_identification_max_attempts": 2, "remediation_max_attempts": 2, "pre_action_snapshot_required": true, "post_action_verification_required": true, "rollback_automatic": false, "cooldown_seconds_source": "REMEDIATION_COOLDOWN_SECONDS"},
+  "authorization": {"human_validation_policy": "mandatory_in_supervised_mode", "authorization_policy": "calendar_controlled", "approval_timeout": null, "waiting_request_never_auto_converts": true},
+  "automation": {"allowed_outside_business_hours": true, "periods": ["night", "weekend", "public_holiday"]},
+  "decision": {"proposed_action": "SHUTDOWN_PORT", "disruptive": true, "required_conditions": ["switch_confirmed", "port_confirmed", "incident_still_actionable", "target_not_whitelisted", "pre_action_snapshot_saved", "snmp_write_capability_validated"]},
+  "verification": {"object": "IF-MIB::ifAdminStatus", "expected_value": "down(2)"},
+  "rollback": {"automatic": false, "restore": "previous_if_admin_status", "requester": "network_administrator_only"}
+}

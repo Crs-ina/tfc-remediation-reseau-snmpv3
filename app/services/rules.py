@@ -123,21 +123,13 @@ class RuleEngine:
                 reason="quarantine_vlan_precondition_failed",
             )
 
-        # Les actions disruptives restent toujours supervisees. Le calendrier
-        # ne vaut jamais approbation humaine pour une ecriture SNMP.
-        if playbook.disruptive:
-            return RuleDecision(
-                playbook_id=playbook.playbook_id,
-                action=playbook.action,
-                state="WAITING_ADMIN_APPROVAL",
-                execution_mode="HUMAN_APPROVAL",
-                reason="explicit_admin_approval_required",
-            )
-
+        # REACTIVATE_PORT is always supervised. SHUTDOWN_PORT and
+        # QUARANTINE_VLAN may only use the pre-authorized AUTOMATIC window.
         automatic_allowed = (
             context.schedule.mode == "AUTOMATIC"
             and playbook.allow_automatic_outside_business_hours
             and playbook.action in context.automatic_allowed_actions
+            and playbook.action in {"SHUTDOWN_PORT", "QUARANTINE_VLAN"}
         )
         if automatic_allowed:
             return RuleDecision(
@@ -146,6 +138,15 @@ class RuleEngine:
                 state="AUTOMATICALLY_AUTHORIZED",
                 execution_mode="AUTOMATIC",
                 reason=context.schedule.reason,
+            )
+
+        if playbook.disruptive:
+            return RuleDecision(
+                playbook_id=playbook.playbook_id,
+                action=playbook.action,
+                state="WAITING_ADMIN_APPROVAL",
+                execution_mode="HUMAN_APPROVAL",
+                reason="explicit_admin_approval_required",
             )
 
         return RuleDecision(

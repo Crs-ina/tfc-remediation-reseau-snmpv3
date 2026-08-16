@@ -65,3 +65,38 @@ def register_incident(payload: dict, playbooks_dir: Path) -> tuple[Incident, boo
     )
     db.session.commit()
     return incident, False
+
+
+def register_recovery(payload: dict) -> Incident | None:
+    """Close a still-pending request when Zabbix recovers the same event.
+
+    The v1.0 contract has no separate problem-event correlation field, so only
+    the stable event identifier is used. Unknown recovery IDs remain ignored.
+    """
+    zabbix_event_id = str(payload["event"]["id"])
+    incident = db.session.execute(
+        db.select(Incident).where(Incident.zabbix_event_id == zabbix_event_id)
+    ).scalar_one_or_none()
+    if incident is None:
+        return None
+    if incident.processing_status not in {
+        "ROUTED", "IDENTIFYING_TARGET", "WAITING_ADMIN_APPROVAL", "ADMIN_APPROVED"
+    }:
+        return incident
+    incident.processing_status = "RECOVERED_BEFORE_ACTION"
+    for remediation in incident.remediations:
+        if remediation.status not in {"SUCCEEDED", "ROLLED_BACK"}:
+            remediation.status = "RECOVERED_BEFORE_ACTION"
+            remediation.end_time = datetime.now(timezone.utc)
+    record_audit(
+        incident_id=incident.incident_id,
+        event_type="ZABBIX_RECOVERY_BEFORE_ACTION",
+        message="Zabbix recovery closed the pending request before any network write.",
+        equipment_name=payload["host"].get("name"),
+        equipment_ip=payload["host"].get("ip"),
+        incident_type=incident.incident_type,
+        result_status="RECOVERED_BEFORE_ACTION",
+        details={"zabbix_event_id": zabbix_event_id},
+    )
+    db.session.commit()
+    return incident

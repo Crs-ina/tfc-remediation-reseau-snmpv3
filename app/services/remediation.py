@@ -48,11 +48,12 @@ def evaluate_incident(
     target_ip: str | None = None,
     port_name: str | None = None,
     previous_vlan_id: int | None = None,
+    previous_port_status: str | None = None,
     now: datetime | None = None,
 ) -> RuleDecision:
     if incident.processing_status == "WAITING_ADMIN_APPROVAL":
         raise RemediationError(
-            "L'incident est deja en attente: le passage du temps ne vaut pas autorisation."
+            "The incident is already waiting; elapsed time is not authorization."
         )
 
     policy = CalendarPolicy.from_file(current_app.config["AUTOMATION_SCHEDULE_PATH"])
@@ -63,10 +64,12 @@ def evaluate_incident(
     target_host: NetworkHost | None = None
 
     if target_confirmed:
-        if target_mac_address is None or switch_id is None or port_index is None:
+        if switch_id is None or port_index is None:
             raise RemediationError(
-                "Une cible confirmee exige target_mac_address, switch_id et port_index."
+                "A confirmed target requires switch_id and port_index."
             )
+        if incident.incident_type == "ip_address_conflict" and target_mac_address is None:
+            raise RemediationError("A MAC address is required for an IP conflict.")
         switch_port, target_host = _confirm_target_location(
             target_mac_address=target_mac_address,
             target_ip=target_ip,
@@ -74,6 +77,7 @@ def evaluate_incident(
             port_index=port_index,
             port_name=port_name,
             previous_vlan_id=previous_vlan_id,
+            previous_port_status=previous_port_status,
         )
         target_whitelisted = is_port_protected(
             current_app.config["WHITELIST_PATH"],
@@ -85,7 +89,7 @@ def evaluate_incident(
         record_audit(
             incident_id=incident.incident_id,
             event_type="TARGET_IDENTIFICATION_FAILED",
-            message="La cible n'a pas pu etre confirmee en lecture seule.",
+            message="The target could not be confirmed through read-only checks.",
             equipment_ip=incident.source_ip,
             incident_type=incident.incident_type,
             result_status="RETRY" if identification_attempts < 2 else "ESCALATED",
@@ -114,7 +118,6 @@ def evaluate_incident(
     remediation: Remediation | None = None
     if (
         switch_port is not None
-        and target_host is not None
         and decision.action != "NO_ACTION"
     ):
         remediation = _current_or_new_remediation(
@@ -139,7 +142,7 @@ def evaluate_incident(
         incident_id=incident.incident_id,
         remediation_id=remediation.remediation_id if remediation else None,
         event_type="RULE_DECISION",
-        message="Decision du moteur de regles.",
+        message="Rule-engine decision.",
         equipment_ip=incident.source_ip,
         port_index=port_index,
         target_ip=target_ip,
@@ -238,15 +241,15 @@ def refuse_incident(incident: Incident, administrator_id: str) -> Remediation:
 
 
 def execute_authorized_remediation(incident: Incident):
-    from .snmp_execution import execute_quarantine_vlan
+    from .snmp_execution import execute_snmp_action
 
-    return execute_quarantine_vlan(incident)
+    return execute_snmp_action(incident)
 
 
 def _current_or_new_remediation(
     incident: Incident,
     *,
-    target_host: NetworkHost,
+    target_host: NetworkHost | None,
     switch_port: SwitchPort,
     action_type: str,
     authorization_mode: str,
@@ -286,7 +289,7 @@ def _record_execution_block(incident: Incident, reason: str) -> None:
         incident_id=incident.incident_id,
         remediation_id=remediation.remediation_id,
         event_type="SNMP_WRITE_BLOCKED",
-        message="Aucune ecriture SNMP n'a ete executee.",
+        message="No SNMP write was executed.",
         port_index=remediation.port_index,
         target_mac=remediation.target_mac_address,
         incident_type=incident.incident_type,
@@ -299,7 +302,7 @@ def _record_execution_block(incident: Incident, reason: str) -> None:
 
 def _latest_remediation_or_fail(incident: Incident) -> Remediation:
     if not incident.remediations:
-        raise RemediationError("Aucune remediation ciblee n'est associee a l'incident.")
+        raise RemediationError("No targeted remediation is associated with this incident.")
     return incident.remediations[-1]
 
 
@@ -313,26 +316,28 @@ def _identification_attempt_count(incident_id: str) -> int:
 
 def _confirm_target_location(
     *,
-    target_mac_address: str,
+    target_mac_address: str | None,
     target_ip: str | None,
     switch_id: str,
     port_index: int,
     port_name: str | None,
     previous_vlan_id: int | None,
-) -> tuple[SwitchPort, NetworkHost]:
+    previous_port_status: str | None,
+) -> tuple[SwitchPort, NetworkHost | None]:
     network_switch = db.session.get(NetworkSwitch, switch_id)
     if network_switch is None:
-        raise RemediationError("Le commutateur cible n'existe pas dans l'inventaire.")
+        raise RemediationError("The target switch is not present in inventory.")
     switch_port = db.session.get(SwitchPort, (switch_id, port_index))
     if switch_port is None:
         if not port_name:
             raise RemediationError(
-                "Le port cible est inconnu et aucun nom SNMP confirme n'est fourni."
+                "The target port is unknown and no SNMP-confirmed name was provided."
             )
         switch_port = SwitchPort(
             network_switch=network_switch,
             port_index=port_index,
             port_name=port_name,
+            status=previous_port_status,
             vlan_id=previous_vlan_id,
         )
         db.session.add(switch_port)
@@ -341,12 +346,16 @@ def _confirm_target_location(
             switch_port.port_name = port_name
         if previous_vlan_id is not None:
             switch_port.vlan_id = previous_vlan_id
+        if previous_port_status is not None:
+            switch_port.status = previous_port_status
 
-    normalized_mac = target_mac_address.strip().lower()
-    target_host = db.session.get(NetworkHost, normalized_mac)
-    if target_host is None:
-        target_host = NetworkHost(mac_address=normalized_mac)
-        db.session.add(target_host)
-    target_host.ip_address = target_ip
-    target_host.switch_port = switch_port
+    target_host = None
+    if target_mac_address:
+        normalized_mac = target_mac_address.strip().lower()
+        target_host = db.session.get(NetworkHost, normalized_mac)
+        if target_host is None:
+            target_host = NetworkHost(mac_address=normalized_mac)
+            db.session.add(target_host)
+        target_host.ip_address = target_ip
+        target_host.switch_port = switch_port
     return switch_port, target_host

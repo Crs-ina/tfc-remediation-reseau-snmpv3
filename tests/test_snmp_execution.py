@@ -133,7 +133,7 @@ def test_no_human_approval_means_no_set(app):
         incident, _remediation, _port = build_waiting_remediation()
         fake = FakeWriteClient([10, 18])
 
-        with pytest.raises(RemediationError, match="approbation humaine"):
+        with pytest.raises(RemediationError, match="Explicit authorization"):
             execute_quarantine_vlan(
                 incident, client=fake, snmp_config=snmp_config()
             )
@@ -246,14 +246,14 @@ def test_set_success_but_post_get_mismatch_fails_verification(app):
     with app.app_context():
         incident, remediation, port = build_waiting_remediation()
         approve(incident)
-        fake = FakeWriteClient([10, 10])
+        fake = FakeWriteClient([10, 10, 10])
 
-        with pytest.raises(RemediationVerificationError, match="VLAN demande 18"):
+        with pytest.raises(RemediationVerificationError, match="Requested VLAN 18"):
             execute_quarantine_vlan(
                 incident, client=fake, snmp_config=snmp_config()
             )
 
-        assert len(fake.set_calls) == 1
+        assert len(fake.set_calls) == 2
         assert fake.set_calls[0][0] == DOT1Q_PVID.with_indices(2)
         assert fake.set_calls[0][1:] == (18, True)
         assert remediation.status == "VERIFICATION_FAILED"
@@ -288,7 +288,7 @@ def test_rollback_requires_explicit_administrator_request(app):
         db.session.commit()
         fake = FakeWriteClient([10])
 
-        with pytest.raises(RemediationError, match="explicite"):
+        with pytest.raises(RemediationError, match="explicit administrator"):
             rollback_quarantine_vlan(
                 incident,
                 administrator_id=" ",
@@ -347,3 +347,16 @@ def test_timing_sums_automated_segments_and_excludes_human_wait(app):
         assert result.timing.snmp_set_seconds == pytest.approx(2.0)
         assert result.timing.verification_seconds == pytest.approx(3.0)
         assert result.timing.total_automated_seconds == pytest.approx(9.75)
+
+
+def test_dry_run_never_calls_set(app):
+    app.config.update(SNMP_WRITE_ENABLED=True, DRY_RUN=True)
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        approve(incident)
+        fake = FakeWriteClient([])
+        result = execute_quarantine_vlan(incident, client=fake, snmp_config=snmp_config())
+        assert result.success is True
+        assert remediation.status == "DRY_RUN"
+        assert fake.set_calls == []
+        assert fake.read_calls == []

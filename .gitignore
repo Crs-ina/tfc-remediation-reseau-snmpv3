@@ -34,6 +34,7 @@ htmlcov/
 instance/
 data/*.db
 data/*.sqlite
+data/port-locks/
 *.log
 
 # Packaging Python

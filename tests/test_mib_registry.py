@@ -94,14 +94,14 @@ def test_remediation_client_rejects_missing_authorization_and_non_pvid_object():
         registry,
     )
 
-    with pytest.raises(SnmpWriteBlocked, match="autorisation"):
+    with pytest.raises(SnmpWriteBlocked, match="authorization"):
         asyncio.run(
             client.set_integer(
                 DOT1Q_PVID.with_indices(2), 18, write_authorized=False
             )
         )
 
-    with pytest.raises(SnmpWriteBlocked, match="non valide"):
+    with pytest.raises(SnmpWriteBlocked, match="not enabled"):
         asyncio.run(
             client.set_integer(SYS_NAME, 18, write_authorized=True)
         )

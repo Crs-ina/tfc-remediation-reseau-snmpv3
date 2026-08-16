@@ -12,6 +12,18 @@
     "physical_disconnection": {
       "playbook_id": "PB-PHYSICAL-DOWN-001",
       "file": "PB-PHYSICAL-DOWN-001.json"
+    },
+    "interface_admin_down": {
+      "playbook_id": "PB-INTERFACE-DOWN-001",
+      "file": "PB-INTERFACE-DOWN-001.json"
+    },
+    "port_flapping": {
+      "playbook_id": "PB-PORT-FLAPPING-001",
+      "file": "PB-PORT-FLAPPING-001.json"
+    },
+    "vlan_policy_violation": {
+      "playbook_id": "PB-VLAN-POLICY-001",
+      "file": "PB-VLAN-POLICY-001.json"
     }
   },
   "fallback": {

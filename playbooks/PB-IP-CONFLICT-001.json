@@ -18,6 +18,12 @@
     "periods": ["night", "weekend", "public_holiday"],
     "never_convert_pending_approval_by_timeout": true
   },
+  "authorization": {
+    "human_validation_policy": "mandatory_in_supervised_mode",
+    "authorization_policy": "calendar_controlled",
+    "approval_timeout": null,
+    "waiting_request_never_auto_converts": true
+  },
   "decision": {
     "proposed_action": "QUARANTINE_VLAN",
     "disruptive": true,

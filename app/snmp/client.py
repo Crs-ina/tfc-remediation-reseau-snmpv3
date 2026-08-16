@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from .mib_catalog import DOT1Q_PVID, MibObjectRef
+from .mib_catalog import DOT1Q_PVID, IF_ADMIN_STATUS, MibObjectRef
 from .mib_registry import MibRegistry
 
 
@@ -71,11 +71,11 @@ class SnmpV3Config:
             if not value
         ]
         if missing:
-            raise ValueError(f"Configuration SNMPv3 incomplete: {', '.join(missing)}")
+            raise ValueError(f"Incomplete SNMPv3 configuration: {', '.join(missing)}")
         if self.auth_protocol != "SHA256":
-            raise ValueError("SNMP_AUTH_PROTOCOL doit etre SHA256.")
+            raise ValueError("SNMP_AUTH_PROTOCOL must be SHA256.")
         if self.priv_protocol != "AES256":
-            raise ValueError("SNMP_PRIV_PROTOCOL doit etre AES256.")
+            raise ValueError("SNMP_PRIV_PROTOCOL must be AES256.")
 
 
 class SnmpReadClient:
@@ -111,7 +111,7 @@ class SnmpReadClient:
     ) -> tuple[str, str]:
         entries = await self.walk(column_ref, max_rows=1)
         if not entries:
-            raise SnmpUnsupportedObject("Aucune instance retournee.")
+            raise SnmpUnsupportedObject("No instance returned.")
         entry = entries[0]
         return ".".join(str(part) for part in entry.oid), entry.value
 
@@ -188,7 +188,7 @@ class SnmpReadClient:
         error_indication, error_status, error_index, var_binds = result
         self._raise_protocol_errors(error_indication, error_status, error_index)
         if not var_binds:
-            raise SnmpUnsupportedObject("Aucune valeur retournee.")
+            raise SnmpUnsupportedObject("No value returned.")
         value = var_binds[0][1]
         if isinstance(
             value,
@@ -205,12 +205,12 @@ class SnmpReadClient:
             index = int(error_index or 0)
             message = error_status.prettyPrint()
             if message in {"noSuchName", "noAccess", "notWritable"}:
-                raise SnmpUnsupportedObject(f"{message} a l'index {index}")
-            raise SnmpClientError(f"{message} a l'index {index}")
+                raise SnmpUnsupportedObject(f"{message} at index {index}")
+            raise SnmpClientError(f"{message} at index {index}")
 
 
 class SnmpRemediationClient(SnmpReadClient):
-    """Ajoute le seul SET valide en laboratoire, avec autorisation explicite."""
+    """Controlled integer SET transport; capability policy is enforced upstream."""
 
     async def set_integer(
         self,
@@ -220,10 +220,11 @@ class SnmpRemediationClient(SnmpReadClient):
         write_authorized: bool,
     ) -> str:
         if not write_authorized:
-            raise SnmpWriteBlocked("SET refuse sans autorisation explicite.")
-        if object_ref.key != DOT1Q_PVID.key or not object_ref.indices:
+            raise SnmpWriteBlocked("SET rejected without explicit authorization.")
+        allowed_objects = {DOT1Q_PVID.key, IF_ADMIN_STATUS.key}
+        if object_ref.key not in allowed_objects or not object_ref.indices:
             raise SnmpWriteBlocked(
-                f"Objet non valide en laboratoire pour SET: {object_ref.key}"
+                f"Object not enabled for a controlled SET: {object_ref.key}"
             )
         api = _pysnmp_api()
         engine = api["SnmpEngine"]()
@@ -268,7 +269,7 @@ def _pysnmp_api() -> dict:
         from pysnmp.proto.rfc1905 import EndOfMibView, NoSuchInstance, NoSuchObject
     except ImportError as exc:
         raise RuntimeError(
-            "PySNMP 7.1+ est requis. Installez les dependances du projet."
+            "PySNMP 7.1+ is required. Install the project dependencies."
         ) from exc
 
     return {

@@ -1,0 +1,10 @@
+{
+  "metadata": {"playbook_id": "PB-INTERFACE-DOWN-001", "title": "Administratively disabled interface", "version": "1.0", "status": "prototype"},
+  "incident_type": "interface_admin_down",
+  "policies": {"target_identification_max_attempts": 2, "remediation_max_attempts": 2, "pre_action_snapshot_required": true, "post_action_verification_required": true, "rollback_automatic": false},
+  "authorization": {"human_validation_policy": "always_supervised", "approval_timeout": null, "waiting_request_never_auto_converts": true},
+  "automation": {"allowed_outside_business_hours": false},
+  "decision": {"proposed_action": "REACTIVATE_PORT", "disruptive": true, "required_conditions": ["switch_confirmed", "port_confirmed", "target_not_whitelisted", "pre_action_snapshot_saved", "snmp_write_capability_validated"]},
+  "verification": {"object": "IF-MIB::ifAdminStatus", "expected_value": "up(1)"},
+  "rollback": {"automatic": false, "restore": "previous_if_admin_status", "requester": "network_administrator_only"}
+}
