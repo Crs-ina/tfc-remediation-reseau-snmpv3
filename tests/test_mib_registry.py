@@ -105,3 +105,25 @@ def test_remediation_client_rejects_missing_authorization_and_non_pvid_object():
         asyncio.run(
             client.set_integer(SYS_NAME, 18, write_authorized=True)
         )
+
+
+def test_remediation_transport_blocks_set_in_dry_run_before_pysnmp() -> None:
+    registry = MibRegistry(package="pysnmp_mibs")
+    registry.warm_up()
+    client = SnmpRemediationClient(
+        SnmpV3Config(
+            host="192.0.2.10",
+            username="snmp-user",
+            auth_key="auth-secret",
+            priv_key="priv-secret",
+        ),
+        registry,
+        dry_run=True,
+    )
+
+    with pytest.raises(SnmpWriteBlocked, match="DRY_RUN"):
+        asyncio.run(
+            client.set_integer(
+                DOT1Q_PVID.with_indices(2), 18, write_authorized=True
+            )
+        )

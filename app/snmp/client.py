@@ -212,6 +212,19 @@ class SnmpReadClient:
 class SnmpRemediationClient(SnmpReadClient):
     """Controlled integer SET transport; capability policy is enforced upstream."""
 
+    def __init__(
+        self,
+        config: SnmpV3Config,
+        mib_registry: MibRegistry,
+        *,
+        dry_run: bool | None = None,
+    ) -> None:
+        super().__init__(config, mib_registry)
+        if dry_run is None:
+            raw = os.getenv("DRY_RUN", "false").strip().lower()
+            dry_run = raw not in {"0", "false", "no", "non", "off"}
+        self.dry_run = bool(dry_run)
+
     async def set_integer(
         self,
         object_ref: MibObjectRef,
@@ -219,6 +232,8 @@ class SnmpRemediationClient(SnmpReadClient):
         *,
         write_authorized: bool,
     ) -> str:
+        if self.dry_run:
+            raise SnmpWriteBlocked("DRY_RUN blocks every SNMP SET.")
         if not write_authorized:
             raise SnmpWriteBlocked("SET rejected without explicit authorization.")
         allowed_objects = {DOT1Q_PVID.key, IF_ADMIN_STATUS.key}

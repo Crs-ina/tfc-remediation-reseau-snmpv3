@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.extensions import db
-from app.models import Incident, NetworkHost, NetworkSwitch, Remediation, SwitchPort
+from app.models import AuditLog, Incident, NetworkHost, NetworkSwitch, Remediation, SwitchPort
 from app.services.audit import record_audit
 from app.services.remediation import (
     RemediationError,
@@ -14,6 +14,7 @@ from app.services.remediation import (
 )
 from app.services.snmp_execution import (
     RemediationVerificationError,
+    execute_interface_admin_action,
     execute_quarantine_vlan,
     rollback_quarantine_vlan,
 )
@@ -356,7 +357,82 @@ def test_dry_run_never_calls_set(app):
         approve(incident)
         fake = FakeWriteClient([])
         result = execute_quarantine_vlan(incident, client=fake, snmp_config=snmp_config())
-        assert result.success is True
+        assert result.success is False
+        assert result.simulated is True
+        assert result.observed_vlan == 10
+        assert remediation.status == "DRY_RUN"
+        assert incident.processing_status == "SIMULATED"
+        assert fake.set_calls == []
+        assert fake.read_calls == []
+        audit = db.session.execute(
+            db.select(AuditLog).where(AuditLog.event_type == "DRY_RUN")
+        ).scalar_one()
+        assert audit.result_status == "SIMULATED"
+        assert '"execution_mode": "DRY_RUN"' in audit.message
+        assert '"snmp_set_executed": false' in audit.message
+
+
+def test_dry_run_simulates_even_when_write_flag_is_disabled(app):
+    app.config.update(SNMP_WRITE_ENABLED=False, DRY_RUN=True)
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        approve(incident)
+        fake = FakeWriteClient([])
+
+        result = execute_quarantine_vlan(
+            incident, client=fake, snmp_config=snmp_config()
+        )
+
+        assert result.simulated is True
         assert remediation.status == "DRY_RUN"
         assert fake.set_calls == []
         assert fake.read_calls == []
+
+
+def test_dry_run_blocks_interface_admin_set(app):
+    app.config.update(SNMP_WRITE_ENABLED=True, DRY_RUN=True)
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        remediation.action_type = "SHUTDOWN_PORT"
+        remediation.previous_port_status = "up"
+        db.session.commit()
+        approve(incident)
+        fake = FakeWriteClient([])
+
+        result = execute_interface_admin_action(
+            incident, client=fake, snmp_config=snmp_config()
+        )
+
+        assert result.simulated is True
+        assert result.requested_vlan == 2
+        assert result.observed_vlan == 1
+        assert fake.set_calls == []
+        assert fake.read_calls == []
+
+
+def test_dry_run_simulates_explicit_rollback_without_set(app):
+    app.config.update(SNMP_WRITE_ENABLED=True, DRY_RUN=True)
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        remediation.status = "SUCCEEDED"
+        incident.processing_status = "REMEDIATED"
+        db.session.commit()
+        fake = FakeWriteClient([])
+
+        requested = rollback_quarantine_vlan(
+            incident,
+            administrator_id="admin-test",
+            client=fake,
+            snmp_config=snmp_config(),
+        )
+
+        assert requested == 10
+        assert remediation.status == "SUCCEEDED"
+        assert incident.processing_status == "REMEDIATED"
+        assert fake.set_calls == []
+        assert fake.read_calls == []
+        audit = db.session.execute(
+            db.select(AuditLog).where(AuditLog.event_type == "DRY_RUN_ROLLBACK")
+        ).scalar_one()
+        assert audit.result_status == "SIMULATED"
+        assert '"snmp_set_executed": false' in audit.message

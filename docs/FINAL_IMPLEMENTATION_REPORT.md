@@ -28,7 +28,9 @@
   `ifAdminStatus`. No Rollback table was added.
 - Writes use at most two SET/GET attempts, succeed only on confirming GET,
   enforce a 60-second cooldown, and serialize the same switch/port with a
-  cross-process file lock. `DRY_RUN=true` never invokes SET.
+  cross-process file lock. `DRY_RUN=true` overrides `SNMP_WRITE_ENABLED` for
+  remediation and rollback, never invokes SET, and records `DRY_RUN` /
+  `SIMULATED` with `snmp_set_executed=false` in the audit trail.
 - `IF-MIB::ifAdminStatus` down/up code paths exist but the capability matrix
   remains `TO_BE_VALIDATED`, so they fail closed before SET. Only
   `Q-BRIDGE-MIB::dot1qPvid` on Arista vEOS 4.29.2F in EVE-NG is

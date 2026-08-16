@@ -98,7 +98,10 @@ qualifie pas.
 - Le SET vers le VLAN 18 n’est déclaré réussi qu’après un GET égal à 18.
 - Deux tentatives maximum sont permises, un cooldown de 60 secondes et un
   verrou inter-processus sérialisent les actions sur un même port.
-- `DRY_RUN=true` exécute le parcours sans aucun SNMP SET.
+- `DRY_RUN=true` est prioritaire sur `SNMP_WRITE_ENABLED` et bloque tous les
+  SNMP SET, y compris les rollbacks. L’action est auditée avec
+  `event_type=DRY_RUN` et `result_status=SIMULATED` ; elle n’est jamais
+  présentée comme une remédiation réellement réussie.
 - Le rollback n’est jamais automatique : un administrateur doit le demander,
   puis un SET remet le `previous_pvid` et un GET le vérifie.
 - Les clés d’authentification et de confidentialité sont masquées dans les
@@ -206,6 +209,26 @@ L'interface quotidienne est `okapi`. Elle couvre les incidents, décisions,
 historique, audit, rollback, état du système et gestion minimale des comptes,
 sans afficher les identifiants internes. Les commandes Flask suivantes restent
 des outils avancés de maintenance.
+
+Le menu `System status` expose l’état effectif, et non seulement le drapeau
+d’écriture configuré :
+
+```text
+OKAPI — SYSTEM STATUS
+
+Backend                  : RUNNING
+Database                 : OK
+Zabbix webhook           : READY
+SNMPv3                   : READY
+SNMP writes              : BLOCKED BY DRY-RUN
+Dry-run mode             : ON
+Authorization mode       : SUPERVISED
+Quarantine VLAN          : 18
+Remediation cooldown     : 60 s
+```
+
+Avec `DRY_RUN=false` et `SNMP_WRITE_ENABLED=true`, les deux lignes deviennent
+respectivement `SNMP writes : ENABLED` et `Dry-run mode : OFF`.
 
 La commande `prepare-snmp` effectue l’identification, les préconditions et le
 snapshot avant l’approbation :

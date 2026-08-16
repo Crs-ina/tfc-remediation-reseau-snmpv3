@@ -60,7 +60,8 @@ def _banner(
         click.echo(f"Administrator : {username}")
     click.echo(f"Schedule Mode : {schedule.mode}")
     click.echo("SNMP Security : SNMPv3 authPriv")
-    click.echo(f"Write Access  : {'ENABLED' if app.config['SNMP_WRITE_ENABLED'] else 'DISABLED'}")
+    click.echo(f"Write Access  : {_snmp_write_state()}")
+    click.echo(f"Dry-run Mode  : {'ON' if app.config['DRY_RUN'] else 'OFF'}")
     click.echo(f"Date/Time     : {local_time(datetime.now(ZoneInfo('Africa/Kinshasa')))}")
     click.echo("Timezone      : Africa/Kinshasa")
     click.echo("-" * 56)
@@ -101,7 +102,7 @@ def _pending(session) -> None:
         if choice == "A":
             approve_incident(incident, session.administrator_id)
             result = execute_authorized_remediation(incident)
-            click.echo(f"Remediation {'succeeded' if result.success else 'failed'}.")
+            click.echo(_execution_result_message(result))
         elif choice == "R":
             refuse_incident(incident, session.administrator_id)
             click.echo("Remediation refused. No remediation was executed.")
@@ -157,7 +158,7 @@ def _decide(session: Administrator, approve: bool) -> None:
         if approve:
             approve_incident(incident, session.administrator_id)
             result = execute_authorized_remediation(incident)
-            click.echo(f"Remediation {'succeeded' if result.success else 'failed'}.")
+            click.echo(_execution_result_message(result))
         else:
             refuse_incident(incident, session.administrator_id)
             click.echo("Remediation rejected. No network write was executed.")
@@ -232,14 +233,44 @@ def _system_status() -> None:
         sqlite_ready = True
     except Exception:
         sqlite_ready = False
-    schedule = CalendarPolicy.from_file(current_app.config["AUTOMATION_SCHEDULE_PATH"]).decide()
-    click.echo(
-        f"Backend       : ONLINE\nSQLite        : {'READY' if sqlite_ready else 'ERROR'}\n"
-        f"MIB registry  : {'READY' if mib_ready else 'ERROR'}\nSchedule mode : {schedule.mode}\n"
-        f"SNMP security : authPriv SHA-256/AES-256\nWrite access  : {'ENABLED' if current_app.config['SNMP_WRITE_ENABLED'] else 'DISABLED'}\n"
-        f"Dry-run       : {'ENABLED' if current_app.config['DRY_RUN'] else 'DISABLED'}"
+    schedule = CalendarPolicy.from_file(
+        current_app.config["AUTOMATION_SCHEDULE_PATH"]
+    ).decide()
+    authorization_mode = (
+        "SUPERVISED" if schedule.mode == "HUMAN_APPROVAL" else schedule.mode
     )
+    webhook_ready = bool(
+        current_app.config["WEBHOOK_TOKEN"]
+        and current_app.config["WEBHOOK_ALLOWED_SOURCE_IPS"]
+    )
+    values = (
+        ("Backend", "RUNNING"),
+        ("Database", "OK" if sqlite_ready else "ERROR"),
+        ("Zabbix webhook", "READY" if webhook_ready else "NOT READY"),
+        ("SNMPv3", "READY" if mib_ready else "NOT READY"),
+        ("SNMP writes", _snmp_write_state()),
+        ("Dry-run mode", "ON" if current_app.config["DRY_RUN"] else "OFF"),
+        ("Authorization mode", authorization_mode),
+        ("Quarantine VLAN", str(current_app.config["QUARANTINE_VLAN_ID"])),
+        (
+            "Remediation cooldown",
+            f"{current_app.config['REMEDIATION_COOLDOWN_SECONDS']} s",
+        ),
+    )
+    click.echo("OKAPI — SYSTEM STATUS\n")
+    click.echo("\n".join(f"{label:<25}: {value}" for label, value in values))
 
+
+def _snmp_write_state() -> str:
+    if current_app.config["DRY_RUN"]:
+        return "BLOCKED BY DRY-RUN"
+    return "ENABLED" if current_app.config["SNMP_WRITE_ENABLED"] else "DISABLED"
+
+
+def _execution_result_message(result) -> str:
+    if result.simulated:
+        return "Remediation simulated (DRY-RUN). No SNMP SET was sent."
+    return f"Remediation {'succeeded' if result.success else 'failed'}."
 
 def _attention_summary() -> None:
     states = {
@@ -299,7 +330,13 @@ def _rollback(session) -> None:
     if selected.upper() == "B": return
     try:
         observed = rollback_snmp_action(items[int(selected) - 1].incident, administrator_id=session.administrator_id)
-        click.echo(f"Rollback succeeded. Restored VLAN: {observed}")
+        if current_app.config["DRY_RUN"]:
+            click.echo(
+                f"Rollback simulated (DRY-RUN). Requested value: {observed}. "
+                "No SNMP SET was sent."
+            )
+        else:
+            click.echo(f"Rollback succeeded. Restored value: {observed}")
     except (ValueError, IndexError, RemediationError) as exc:
         click.echo(f"Rollback unavailable: {exc}")
 

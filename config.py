@@ -14,7 +14,14 @@ def env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
         return default
-    return raw.strip().lower() in {"1", "true", "yes", "oui", "on"}
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "oui", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "non", "off"}:
+        return False
+    raise ValueError(
+        f"Invalid boolean value for {name}: {raw!r}; expected true/false, on/off or 1/0."
+    )
 
 
 def env_csv(name: str, default: str = "") -> tuple[str, ...]:
