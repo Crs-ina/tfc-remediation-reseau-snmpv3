@@ -17,14 +17,15 @@ from app.services.administrators import (
 from app.services.calendar_policy import CalendarPolicy
 from app.services.remediation import ConcurrentDecisionError, RemediationError, approve_incident, execute_authorized_remediation, refuse_incident
 from app.services.snmp_execution import rollback_snmp_action
-from .okapi_art import PALETTES, render_random_banner
+from .ui.colors import PALETTES
+from .ui.splash import preview_all, show_splash
 
 SUBTITLE = "Orchestrateur de Kimwenza Automatisé pour la Protection et l’Automatisation"
 
 
 def choose_banner_color() -> str:
     """Compatibility helper retained for callers/tests of the original CLI."""
-    return random.choice(tuple(palette.name for palette in PALETTES))
+    return random.choice(tuple(PALETTES))
 
 
 def local_time(value: datetime | None) -> str:
@@ -36,8 +37,21 @@ def local_time(value: datetime | None) -> str:
     return value.astimezone(zone).strftime("%A, %-d %B %Y - %H:%M:%S")
 
 
-def _banner(username: str | None = None) -> None:
-    click.echo(render_random_banner())
+def _banner(
+    username: str | None = None,
+    *,
+    show_identity: bool = True,
+    animated: bool = True,
+    fast: bool = False,
+    color: bool | None = None,
+) -> None:
+    if show_identity:
+        show_splash(
+            animated=animated,
+            fast=fast,
+            color=color,
+            stream=click.get_text_stream("stdout"),
+        )
     click.echo(SUBTITLE)
     schedule = CalendarPolicy.from_file(current_app.config["AUTOMATION_SCHEDULE_PATH"]).decide()
     app = current_app
@@ -290,18 +304,49 @@ def _rollback(session) -> None:
         click.echo(f"Rollback unavailable: {exc}")
 
 
-okapi_cli = AppGroup("okapi", help="OKAPI administrator interface.", invoke_without_command=True)
+okapi_cli = AppGroup(
+    "okapi",
+    help="OKAPI administrator interface.",
+    invoke_without_command=True,
+    params=[
+        click.Option(["--no-splash"], is_flag=True, help="Skip the startup identity screen."),
+        click.Option(["--no-color"], is_flag=True, help="Disable ANSI colours in the splash."),
+        click.Option(["--fast"], is_flag=True, help="Show the splash without animation delays."),
+        click.Option(["--no-animation"], is_flag=True, help="Display the splash and READY state immediately."),
+    ],
+)
 
 @okapi_cli.command("create-account")
 def create_account_command() -> None:
     """Create an administrator account with a protected password prompt."""
     _create_account()
 
+
+@okapi_cli.command("preview-splash")
+@click.option("--width", type=click.IntRange(min=12), default=100, show_default=True)
+@click.option("--no-color", is_flag=True, help="Disable ANSI colours.")
+@click.option("--ascii", "ascii_only", is_flag=True, help="Use ASCII-only decorations and titles.")
+def preview_splash_command(width: int, no_color: bool, ascii_only: bool) -> None:
+    """Display all eight splash compositions for visual review."""
+    preview_all(
+        width=width,
+        color=not no_color,
+        unicode=not ascii_only,
+        stream=click.get_text_stream("stdout"),
+    )
+
 @click.pass_context
-def okapi(ctx: click.Context) -> None:
+def okapi(
+    ctx: click.Context,
+    no_splash: bool,
+    no_color: bool,
+    fast: bool,
+    no_animation: bool,
+) -> None:
     if ctx.invoked_subcommand:
         return
-    _banner()
+    if not no_splash:
+        _banner(animated=not no_animation, fast=fast, color=False if no_color else None)
     while True:
         choice = click.prompt("[1] Login  [2] Create administrator account  [0] Exit", default="", show_default=False).strip()
         if not choice: continue
@@ -315,7 +360,7 @@ def okapi(ctx: click.Context) -> None:
         except AuthenticationError as exc:
             click.echo(str(exc)); continue
         click.echo(f"Login successful. Welcome, {administrator.username}.")
-        _banner(administrator.username)
+        _banner(administrator.username, show_identity=False)
         _attention_summary()
         while True:
             click.echo("[1] Pending incidents [2] All incidents [3] Incident details [4] Approve remediation [5] Reject remediation [6] Remediation history [7] Audit logs [8] Rollback [9] System status [A] Account [L] Logout [0] Exit")

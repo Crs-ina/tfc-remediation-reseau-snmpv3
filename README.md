@@ -21,6 +21,32 @@ Approve/Refuse decisions and requested rollbacks are linked to the logged-in
 administrator in `audit_logs`. Passwords are stored only as Werkzeug password
 hashes.
 
+The startup identity is responsive and genuinely randomized across multiple
+Okapi poses, title styles, layouts, ANSI palettes, decorations and short boot
+sequences. It is emitted only on an interactive terminal, so redirected output
+and automation streams remain clean. Useful launch options are:
+
+```bash
+okapi --fast
+okapi --no-animation
+okapi --no-color
+okapi --no-splash
+```
+
+Preview the eight reference compositions without starting an administrator
+session:
+
+```bash
+python -m app.cli.ui.preview --preview --width 100
+python -m app.cli.ui.preview --preview --width 72 --no-color --ascii
+# Equivalent installed command:
+okapi preview-splash --width 100
+```
+
+The implementation is split between `app/cli/ui/ascii_art.py`, `colors.py`,
+`animations.py` and `splash.py`. See `docs/OKAPI_SPLASH_SCREEN.md` for the
+visual catalogue and extension guide.
+
 Advanced maintenance commands remain available separately. Incident and audit
 searches support `--from "YYYY-MM-DD HH:MM"` and `--to "YYYY-MM-DD HH:MM"`,
 interpreted in `Africa/Kinshasa`.

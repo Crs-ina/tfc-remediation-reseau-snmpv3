@@ -1,3 +1,5 @@
+import sys
+
 from app import create_app
 from app.cli.okapi import okapi_cli
 
@@ -7,7 +9,7 @@ def main() -> None:
 
     with app.app_context():
         okapi_cli.main(
-            args=[],
+            args=sys.argv[1:],
             prog_name="okapi",
             standalone_mode=True,
         )
