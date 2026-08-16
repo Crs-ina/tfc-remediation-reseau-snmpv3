@@ -17,6 +17,11 @@ def env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "oui", "on"}
 
 
+def env_csv(name: str, default: str = "") -> tuple[str, ...]:
+    raw = os.getenv(name, default)
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
 def database_uri() -> str:
     raw = os.getenv("DATABASE_URL", "sqlite:///data/remediation.db").strip()
     if not raw.startswith("sqlite:///"):
@@ -50,6 +55,15 @@ class Config:
     JSON_SORT_KEYS = False
 
     WEBHOOK_TOKEN = os.getenv("WEBHOOK_TOKEN", "").strip()
+    # Zabbix and OKAPI are co-located in the laboratory. Gunicorn or Flask
+    # reads these values; the route uses the source allow-list as defence in
+    # depth and never logs the shared token.
+    WEBHOOK_BIND_HOST = os.getenv("WEBHOOK_BIND_HOST", "127.0.0.1").strip()
+    WEBHOOK_BIND_PORT = int(os.getenv("WEBHOOK_BIND_PORT", "5000"))
+    WEBHOOK_ALLOWED_SOURCE_IPS = env_csv(
+        "WEBHOOK_ALLOWED_SOURCE_IPS", "127.0.0.1,::1"
+    )
+    WEBHOOK_MAX_CONTENT_LENGTH = int(os.getenv("WEBHOOK_MAX_CONTENT_LENGTH", "65536"))
     REQUIRE_REMEDIATION_TAG = env_bool("REQUIRE_REMEDIATION_TAG", True)
     REMEDIATION_TAG_NAME = os.getenv("REMEDIATION_TAG_NAME", "remediation").strip()
     REMEDIATION_TAG_VALUE = os.getenv("REMEDIATION_TAG_VALUE", "enabled").strip()
@@ -71,6 +85,7 @@ class Config:
 
     SCHEMA_PATH = BASE_DIR / "schemas" / "zabbix_webhook_payload_schema_v1.0.json"
     PLAYBOOKS_DIR = BASE_DIR / "playbooks"
+    MAX_CONTENT_LENGTH = WEBHOOK_MAX_CONTENT_LENGTH
 
 
 class TestConfig(Config):

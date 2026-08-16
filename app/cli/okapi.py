@@ -10,32 +10,18 @@ from flask.cli import AppGroup
 
 from app.extensions import db
 from app.models import AuditLog, Incident, Remediation
-from app.services.administrators import AuthenticationError, authenticate_administrator, change_password, create_administrator
+from app.services.administrators import AuthenticationError, authenticate_administrator, create_administrator
 from app.services.calendar_policy import CalendarPolicy
 from app.services.remediation import ConcurrentDecisionError, RemediationError, approve_incident, execute_authorized_remediation, refuse_incident
 from app.services.snmp_execution import rollback_quarantine_vlan
+from .okapi_art import PALETTES, render_random_banner
 
-ANSI_PALETTE = ("cyan", "green", "yellow", "blue", "magenta")
-ANSI_CODES = {"cyan": "36", "green": "32", "yellow": "33", "blue": "34", "magenta": "35"}
-OKAPI_ANIMAL = r"""
-       /\_/\\
-  .---( o.o )---.
- /  _  /   \  _  \
- | (_) | . | (_) |
-  \___/|___|\___/
-"""
-OKAPI_WORD = r"""
-  OOO  K  K  AAA  PPPP  III
- O   O K K  A   A P   P  I
- O   O KK   AAAAA PPPP   I
- O   O K K  A   A P      I
-  OOO  K  K A   A P     III
-"""
 SUBTITLE = "Orchestrateur de Kimwenza Automatisé pour la Protection et l’Automatisation"
 
 
 def choose_banner_color() -> str:
-    return random.choice(ANSI_PALETTE)
+    """Compatibility helper retained for callers/tests of the original CLI."""
+    return random.choice(tuple(palette.name for palette in PALETTES))
 
 
 def local_time(value: datetime | None) -> str:
@@ -48,10 +34,8 @@ def local_time(value: datetime | None) -> str:
 
 
 def _banner(username: str | None = None) -> None:
-    color = choose_banner_color()
-    ansi = ANSI_CODES[color] if click.get_text_stream("stdout").isatty() else None
-    artwork = f"{OKAPI_ANIMAL}\n{OKAPI_WORD}\n{SUBTITLE}"
-    click.echo(f"\033[{ansi}m{artwork}\033[0m" if ansi else artwork)
+    click.echo(render_random_banner())
+    click.echo(SUBTITLE)
     schedule = CalendarPolicy.from_file(current_app.config["AUTOMATION_SCHEDULE_PATH"]).decide()
     app = current_app
     click.echo("-" * 56)

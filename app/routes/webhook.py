@@ -12,6 +12,11 @@ bp = Blueprint("zabbix_webhook", __name__, url_prefix="/api/v1/incidents")
 
 @bp.post("/zabbix")
 def receive_zabbix_incident():
+    allowed_sources = current_app.config["WEBHOOK_ALLOWED_SOURCE_IPS"]
+    if allowed_sources and request.remote_addr not in allowed_sources:
+        # The response is deliberately generic and contains no deployment or
+        # authentication details.  The event is not persisted.
+        return jsonify({"ok": False, "error": "Webhook source is not allowed."}), 403
     try:
         verify_webhook_token(
             request.headers.get("X-Webhook-Token"),
