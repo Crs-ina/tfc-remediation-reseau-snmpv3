@@ -7,6 +7,7 @@ from app.extensions import db
 from app.models import AuditLog, Incident, NetworkHost, NetworkSwitch, Remediation, SwitchPort
 from app.services.snmp_preparation import (
     SnmpPreparationBlocked,
+    inspect_physical_disconnection_with_snmp,
     prepare_incident_with_snmp,
     prepare_port_incident_with_snmp,
 )
@@ -17,6 +18,8 @@ from app.snmp.mib_catalog import (
     DOT1Q_TP_FDB_PORT,
     IF_DESCR,
     IF_ADMIN_STATUS,
+    IF_OPER_STATUS,
+    IP_NET_TO_PHYSICAL_ADDRESS,
     MibObjectRef,
 )
 from app.snmp.mib_registry import MibRegistry
@@ -83,6 +86,15 @@ class FakePreparationClient:
         self, column_ref: MibObjectRef, *, max_rows: int = 4096
     ) -> list[SnmpWalkEntry]:
         self.walk_calls += 1
+        if column_ref == IP_NET_TO_PHYSICAL_ADDRESS:
+            return [
+                SnmpWalkEntry(
+                    object_ref=IP_NET_TO_PHYSICAL_ADDRESS,
+                    oid=(1, 3, 6, 7, 1, 4, 192, 0, 2, 50),
+                    suffix=(7, 1, 4, 192, 0, 2, 50),
+                    value="0x005079666803",
+                )
+            ]
         return self.rows
 
     async def read_scalar(self, object_ref: MibObjectRef) -> str:
@@ -94,6 +106,8 @@ class FakePreparationClient:
         if object_ref.key == IF_DESCR.key:
             return "Ethernet2"
         if object_ref.key == IF_ADMIN_STATUS.key:
+            return "2"
+        if object_ref.key == IF_OPER_STATUS.key:
             return "2"
         if object_ref.key == DOT1Q_PVID.key:
             return "10"
@@ -126,7 +140,7 @@ def test_preparation_persists_bridge_port_interface_pvid_and_target(app):
         assert host is not None and host.port_index == 2
         assert remediation.previous_vlan_id == 10
         assert remediation.authorization_mode in {"SUPERVISED", "AUTOMATIC"}
-        assert fake.walk_calls == 1
+        assert fake.walk_calls == 2
 
 
 def test_port_centric_incident_does_not_require_a_mac(app):
@@ -145,6 +159,34 @@ def test_port_centric_incident_does_not_require_a_mac(app):
         assert remediation.target_mac_address is None
         assert remediation.previous_port_status == "2"
         assert remediation.action_type == "REACTIVATE_PORT"
+
+
+def test_physical_disconnection_performs_read_only_checks_and_escalates(app):
+    with app.app_context():
+        _switch, incident = add_switch_and_incident()
+        incident.incident_type = "physical_disconnection"
+        incident.playbook_id = "PB-PHYSICAL-DOWN-001"
+        db.session.commit()
+        fake = FakePreparationClient()
+
+        result = inspect_physical_disconnection_with_snmp(
+            incident,
+            switch_id="sw-eve-1",
+            bridge_port=2,
+            client=fake,
+            snmp_config=snmp_config(),
+        )
+
+        assert result.if_admin_status == "2"
+        assert result.if_oper_status == "2"
+        assert incident.processing_status == "ESCALATED_NO_REMEDIATION"
+        assert db.session.execute(db.select(Remediation)).scalars().all() == []
+        audit = db.session.execute(
+            db.select(AuditLog).where(
+                AuditLog.event_type == "PHYSICAL_DISCONNECTION_CHECKED"
+            )
+        ).scalar_one()
+        assert '"snmp_set_executed": false' in audit.message
 
 
 def test_second_incident_revalidates_known_port_without_full_walk(app):

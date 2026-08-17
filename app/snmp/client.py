@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from .mib_catalog import DOT1Q_PVID, IF_ADMIN_STATUS, MibObjectRef
+from .mib_catalog import DOT1Q_PVID, MibObjectRef
 from .mib_registry import MibRegistry
 
 
@@ -236,7 +236,10 @@ class SnmpRemediationClient(SnmpReadClient):
             raise SnmpWriteBlocked("DRY_RUN blocks every SNMP SET.")
         if not write_authorized:
             raise SnmpWriteBlocked("SET rejected without explicit authorization.")
-        allowed_objects = {DOT1Q_PVID.key, IF_ADMIN_STATUS.key}
+        # Absolute transport boundary: only the laboratory-validated PVID
+        # object can ever reach PySNMP SET. Other proposed actions remain
+        # TO_BE_VALIDATED and are stopped by the capability gate upstream.
+        allowed_objects = {DOT1Q_PVID.key}
         if object_ref.key not in allowed_objects or not object_ref.indices:
             raise SnmpWriteBlocked(
                 f"Object not enabled for a controlled SET: {object_ref.key}"

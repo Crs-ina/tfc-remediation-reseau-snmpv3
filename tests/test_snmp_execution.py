@@ -1,11 +1,12 @@
 import json
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from app.extensions import db
-from app.models import AuditLog, Incident, NetworkHost, NetworkSwitch, Remediation, SwitchPort
+from app.models import Administrator, AuditLog, Incident, NetworkHost, NetworkSwitch, Remediation, SwitchPort
 from app.services.audit import record_audit
 from app.services.remediation import (
     RemediationError,
@@ -16,6 +17,7 @@ from app.services.snmp_execution import (
     RemediationVerificationError,
     execute_interface_admin_action,
     execute_quarantine_vlan,
+    execute_snmp_action,
     rollback_quarantine_vlan,
 )
 from app.snmp.client import SnmpV3Config
@@ -102,7 +104,12 @@ def build_waiting_remediation(
         previous_port_status="up",
         previous_vlan_id=10,
     )
-    db.session.add_all([network_switch, port, host, incident, remediation])
+    administrator = Administrator(
+        administrator_id="admin-test", system_username="admin-test"
+    )
+    db.session.add_all(
+        [network_switch, port, host, incident, remediation, administrator]
+    )
     db.session.commit()
     if prepared:
         record_audit(
@@ -370,6 +377,7 @@ def test_dry_run_never_calls_set(app):
         assert audit.result_status == "SIMULATED"
         assert '"execution_mode": "DRY_RUN"' in audit.message
         assert '"snmp_set_executed": false' in audit.message
+        assert '"write_result": "NO_WRITE"' in audit.message
 
 
 def test_dry_run_simulates_even_when_write_flag_is_disabled(app):
@@ -436,3 +444,57 @@ def test_dry_run_simulates_explicit_rollback_without_set(app):
         ).scalar_one()
         assert audit.result_status == "SIMULATED"
         assert '"snmp_set_executed": false' in audit.message
+        assert '"write_result": "NO_WRITE"' in audit.message
+
+
+def test_unknown_action_has_no_snmp_write_path(app):
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        incident.incident_type = None
+        incident.playbook_id = "PB-UNKNOWN-001"
+        incident.processing_status = "ADMIN_APPROVED"
+        remediation.action_type = "NO_ACTION"
+        remediation.status = "AUTHORIZED_PENDING_EXECUTION"
+        db.session.commit()
+        fake = FakeWriteClient([])
+
+        with pytest.raises(UnsafeOperationBlocked, match="action_has_no_write_path"):
+            execute_snmp_action(incident, client=fake, snmp_config=snmp_config())
+
+        assert fake.set_calls == []
+        assert fake.read_calls == []
+
+
+def test_recent_remediation_on_same_port_enforces_cooldown(app):
+    enable_writes(app)
+    with app.app_context():
+        incident, _remediation, port = build_waiting_remediation()
+        prior_incident = Incident(
+            incident_type="ip_address_conflict",
+            zabbix_event_id="evt-prior-cooldown",
+            processing_status="REMEDIATED",
+            playbook_id="PB-IP-CONFLICT-001",
+        )
+        prior = Remediation(
+            incident=prior_incident,
+            switch_port=port,
+            switch_id=port.switch_id,
+            port_index=port.port_index,
+            action_type="QUARANTINE_VLAN",
+            authorization_mode="SUPERVISED",
+            status="SUCCEEDED",
+            previous_vlan_id=10,
+            end_time=datetime.now(timezone.utc),
+        )
+        db.session.add_all([prior_incident, prior])
+        db.session.commit()
+        approve(incident)
+        fake = FakeWriteClient([])
+
+        with pytest.raises(UnsafeOperationBlocked, match="cooldown"):
+            execute_quarantine_vlan(
+                incident, client=fake, snmp_config=snmp_config()
+            )
+
+        assert fake.set_calls == []
+        assert fake.read_calls == []

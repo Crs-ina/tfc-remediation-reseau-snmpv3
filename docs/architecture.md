@@ -18,7 +18,10 @@ Zabbix
   -> persistent CLI attention summary
 
 Administrator
-  -> OKAPI Flask CLI (authenticated local session)
+  -> Linux/SSH authenticated session
+  -> OKAPI Flask CLI
+       -> resolve/create ADMINISTRATOR audit identity
+       -> sudo/PAM reauthentication for critical actions
        -> consulter incidents
        -> evaluer le contexte confirme
        -> approuver ou refuser
@@ -57,11 +60,13 @@ WAITING_ADMIN_APPROVAL + Zabbix recovery
 - the seven business entities are `incidents`, `remediations`, `audit_logs`,
   `network_switches`, `switch_ports`, `network_hosts` and `administrators`;
   `audit_logs.administrator_id` is nullable: `ADMINISTRATOR 1 -> 0..N AUDIT_LOG`.
-- `snmp/` ne contient que les lectures SNMPv3 et la decouverte.
+- `snmp/` separe le client read-only du transport de remediation, dont la
+  frontiere SET n'accepte que `Q-BRIDGE-MIB::dot1qPvid`.
 - `cli/` expose les operations de l'administrateur.
 - `playbooks/` reste la source JSON des regles propres aux incidents.
 - `config/whitelist.json` protege les ports critiques sans table SQL.
 - `config/automation_schedule.json` definit le calendrier d'automatisation.
+- `data/runtime-settings.json` conserve le dry-run effectif hors du MLD.
 
 ## Politique automatique
 

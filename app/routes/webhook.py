@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.extensions import db
+from app.services.audit import record_audit
 from app.services.incident_service import register_incident, register_recovery, tag_value
 from app.services.payload_validation import validate_payload
 from app.services.security import AuthenticationError, verify_webhook_token
@@ -16,6 +18,7 @@ def receive_zabbix_incident():
     if allowed_sources and request.remote_addr not in allowed_sources:
         # The response is deliberately generic and contains no deployment or
         # authentication details.  The event is not persisted.
+        _record_rejection("WEBHOOK_SOURCE_REJECTED", "Webhook source rejected.")
         return jsonify({"ok": False, "error": "Webhook source is not allowed."}), 403
     try:
         verify_webhook_token(
@@ -23,14 +26,19 @@ def receive_zabbix_incident():
             current_app.config["WEBHOOK_TOKEN"],
         )
     except AuthenticationError as exc:
+        _record_rejection("WEBHOOK_AUTHENTICATION_REJECTED", "Webhook authentication failed.")
         return jsonify({"ok": False, "error": str(exc)}), 401
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
+        _record_rejection("WEBHOOK_PAYLOAD_REJECTED", "Webhook payload is not a JSON object.")
         return jsonify({"ok": False, "error": "Le payload doit etre un objet JSON."}), 400
 
     validation_errors = validate_payload(payload, current_app.config["SCHEMA_PATH"])
     if validation_errors:
+        _record_rejection(
+            "WEBHOOK_SCHEMA_REJECTED", "Webhook payload failed JSON Schema validation."
+        )
         return (
             jsonify(
                 {
@@ -60,6 +68,10 @@ def receive_zabbix_incident():
     if current_app.config["REQUIRE_REMEDIATION_TAG"]:
         observed = tag_value(payload, current_app.config["REMEDIATION_TAG_NAME"])
         if observed != current_app.config["REMEDIATION_TAG_VALUE"]:
+            _record_rejection(
+                "WEBHOOK_OUTSIDE_REMEDIATION_SCOPE",
+                "Valid event ignored because remediation scope is not enabled.",
+            )
             return jsonify(
                 {
                     "ok": True,
@@ -84,3 +96,18 @@ def receive_zabbix_incident():
             "state": incident.processing_status,
         }
     )
+
+
+def _record_rejection(event_type: str, message: str) -> None:
+    """Best-effort security audit that never records a token or raw payload."""
+
+    try:
+        record_audit(
+            incident_id=None,
+            event_type=event_type,
+            message=message,
+            result_status="REJECTED",
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()

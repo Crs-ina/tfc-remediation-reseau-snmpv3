@@ -53,6 +53,9 @@ class AuditLog(db.Model):
     administrator: Mapped["Administrator | None"] = relationship(back_populates="audit_logs")
 
     def to_dict(self) -> dict[str, object]:
+        administrator = (
+            self.administrator.system_username if self.administrator else "SYSTEM"
+        )
         return {
             "log_id": self.log_id,
             "event_timestamp": self.event_timestamp.isoformat(),
@@ -60,6 +63,7 @@ class AuditLog(db.Model):
             "incident_id": self.incident_id,
             "remediation_id": self.remediation_id,
             "administrator_id": self.administrator_id,
+            "administrator": administrator,
             "equipment_name": self.equipment_name,
             "equipment_ip": self.equipment_ip,
             "port_index": self.port_index,

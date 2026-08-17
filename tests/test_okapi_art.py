@@ -59,7 +59,8 @@ def test_banner_fits_small_and_exceptionally_narrow_terminals() -> None:
 def test_compatibility_renderer_uses_new_splash() -> None:
     banner = render_random_banner(width=80, color=False)
     assert "OKAPI" in banner
-    assert "Network" in banner or "Observe" in banner or "Secure" in banner
+    normalized = banner.lower()
+    assert "network" in normalized or "observe" in normalized or "secure" in normalized
 
 
 def test_colour_rendering_resets_ansi_sequences() -> None:

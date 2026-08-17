@@ -79,7 +79,9 @@ def list_logs(incident_id: str | None, from_value: str | None, to_value: str | N
     if action: statement = statement.where(AuditLog.action_type == action)
     if result: statement = statement.where(AuditLog.result_status == result)
     if administrator:
-        statement = statement.join(AuditLog.administrator).where(Administrator.username == administrator)
+        statement = statement.join(AuditLog.administrator).where(
+            Administrator.system_username == administrator
+        )
     if switch_name: statement = statement.where(AuditLog.equipment_name == switch_name)
     if port is not None: statement = statement.where(AuditLog.port_index == port)
     statement = statement.offset((page - 1) * 20).limit(20)

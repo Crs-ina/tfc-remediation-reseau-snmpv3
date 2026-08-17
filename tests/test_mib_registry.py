@@ -7,6 +7,7 @@ from app.snmp.client import SnmpRemediationClient, SnmpV3Config, SnmpWriteBlocke
 from app.snmp.mib_catalog import (
     DOT1Q_PVID,
     DOT1Q_TP_FDB_PORT,
+    IF_ADMIN_STATUS,
     IF_DESCR,
     SYS_NAME,
 )
@@ -104,6 +105,13 @@ def test_remediation_client_rejects_missing_authorization_and_non_pvid_object():
     with pytest.raises(SnmpWriteBlocked, match="not enabled"):
         asyncio.run(
             client.set_integer(SYS_NAME, 18, write_authorized=True)
+        )
+
+    with pytest.raises(SnmpWriteBlocked, match="not enabled"):
+        asyncio.run(
+            client.set_integer(
+                IF_ADMIN_STATUS.with_indices(7), 2, write_authorized=True
+            )
         )
 
 

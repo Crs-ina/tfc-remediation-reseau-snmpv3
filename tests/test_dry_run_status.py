@@ -3,6 +3,9 @@ from types import SimpleNamespace
 import pytest
 
 from app.cli.okapi import _system_status
+from app.models import Administrator, AuditLog
+from app.services.runtime_settings import change_dry_run_mode, is_dry_run_enabled
+from app.extensions import db
 from config import env_bool
 
 
@@ -72,3 +75,37 @@ def test_system_status_enables_writes_only_when_dry_run_is_off(
     values = _status_values(capsys.readouterr().out)
     assert values["SNMP writes"] == "ENABLED"
     assert values["Dry-run mode"] == "OFF"
+
+
+def test_dry_run_cli_setting_is_persistent_reauthenticated_and_audited(app) -> None:
+    actions: list[str] = []
+
+    def reauthenticate(_administrator, action: str) -> None:
+        actions.append(action)
+
+    with app.app_context():
+        administrator = Administrator(system_username="alice")
+        db.session.add(administrator)
+        db.session.commit()
+
+        assert change_dry_run_mode(
+            True, administrator, reauthenticator=reauthenticate
+        ) is True
+        assert is_dry_run_enabled() is True
+        assert actions == ["ENABLE_DRY_RUN"]
+
+        app.config["DRY_RUN"] = False
+        assert is_dry_run_enabled() is True
+        audit = db.session.execute(
+            db.select(AuditLog).where(AuditLog.event_type == "DRY_RUN_MODE_CHANGED")
+        ).scalar_one()
+        assert audit.administrator_id == administrator.administrator_id
+        assert audit.result_status == "SUCCESS"
+
+
+def test_invalid_runtime_setting_fails_safe_to_dry_run(app) -> None:
+    path = app.config["RUNTIME_SETTINGS_PATH"]
+    path.write_text('{"dry_run": "off"}', encoding="utf-8")
+    with app.app_context():
+        app.config["DRY_RUN"] = False
+        assert is_dry_run_enabled() is True

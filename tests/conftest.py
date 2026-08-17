@@ -28,6 +28,8 @@ def app(tmp_path):
             "QUARANTINE_VLAN_EXISTS": True,
             "QUARANTINE_VLAN_ISOLATED": True,
             "SNMP_WRITE_ENABLED": False,
+            "DRY_RUN": False,
+            "RUNTIME_SETTINGS_PATH": tmp_path / "runtime-settings.json",
             "SNMP_MIB_PACKAGE": "pysnmp_mibs",
             "SNMP_MIB_PATH": None,
             "SNMP_CAPABILITIES_PATH": PROJECT_ROOT

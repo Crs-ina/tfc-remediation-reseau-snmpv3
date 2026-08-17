@@ -21,8 +21,10 @@ from app.snmp.mib_catalog import DOT1D_BASE_PORT_IF_INDEX, DOT1Q_PVID, IF_ADMIN_
 from app.snmp.mib_registry import MibRegistry
 
 from .audit import record_audit
+from .administrators import IdentityError, require_administrator
 from .port_lock import PortBusyError, port_write_lock
 from .remediation import RemediationError, UnsafeOperationBlocked
+from .runtime_settings import is_dry_run_enabled
 from .whitelist import is_port_protected
 
 
@@ -106,7 +108,7 @@ def execute_quarantine_vlan(
     ):
         _block_execution(incident, remediation, "port_became_whitelisted")
 
-    if current_app.config["DRY_RUN"]:
+    if is_dry_run_enabled():
         return _dry_run_result(incident, remediation, current_app.config["QUARANTINE_VLAN_ID"])
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         _block_execution(incident, remediation, "SNMP_WRITE_ENABLED=false")
@@ -132,7 +134,7 @@ def execute_quarantine_vlan(
     write_client = client or SnmpRemediationClient(
         effective_config,
         mib_registry,
-        dry_run=bool(current_app.config["DRY_RUN"]),
+        dry_run=is_dry_run_enabled(),
     )
     requested_vlan = int(current_app.config["QUARANTINE_VLAN_ID"])
     pvid_ref = DOT1Q_PVID.with_indices(remediation.port_index)
@@ -253,7 +255,7 @@ def execute_interface_admin_action(
         _block_execution(incident, remediation, "snmp_preparation_missing")
     if is_port_protected(current_app.config["WHITELIST_PATH"], switch_id=remediation.switch_id, port_index=remediation.port_index):
         _block_execution(incident, remediation, "port_became_whitelisted")
-    if current_app.config["DRY_RUN"]:
+    if is_dry_run_enabled():
         return _dry_run_result(incident, remediation, expected)
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         _block_execution(incident, remediation, "SNMP_WRITE_ENABLED=false")
@@ -273,7 +275,7 @@ def execute_interface_admin_action(
     write_client = client or SnmpRemediationClient(
         effective_config,
         mib_registry,
-        dry_run=bool(current_app.config["DRY_RUN"]),
+        dry_run=is_dry_run_enabled(),
     )
     try:
         if_index = int(asyncio.run(write_client.read_scalar(DOT1D_BASE_PORT_IF_INDEX.with_indices(remediation.port_index))))
@@ -328,8 +330,10 @@ def rollback_quarantine_vlan(
     client: SnmpRemediationClient | None = None,
     snmp_config: SnmpV3Config | None = None,
 ) -> int:
-    if not administrator_id.strip():
-        raise RemediationError("An explicit administrator request is required.")
+    try:
+        require_administrator(administrator_id)
+    except IdentityError as exc:
+        raise RemediationError(str(exc)) from exc
     remediation = _targeted_remediation(incident)
     if remediation.status != "SUCCEEDED" or remediation.previous_vlan_id is None:
         raise RemediationError(
@@ -351,7 +355,7 @@ def rollback_quarantine_vlan(
         port_index=remediation.port_index,
     ):
         _block_execution(incident, remediation, "rollback_port_whitelisted")
-    if current_app.config["DRY_RUN"]:
+    if is_dry_run_enabled():
         return _dry_run_rollback_result(
             incident,
             remediation,
@@ -377,7 +381,7 @@ def rollback_quarantine_vlan(
     write_client = client or SnmpRemediationClient(
         effective_config,
         mib_registry,
-        dry_run=bool(current_app.config["DRY_RUN"]),
+        dry_run=is_dry_run_enabled(),
     )
     pvid_ref = DOT1Q_PVID.with_indices(remediation.port_index)
     previous_pvid = remediation.previous_vlan_id
@@ -462,8 +466,10 @@ def rollback_interface_admin_action(
     client: SnmpRemediationClient | None = None,
     snmp_config: SnmpV3Config | None = None,
 ) -> int:
-    if not administrator_id.strip():
-        raise RemediationError("An explicit administrator request is required.")
+    try:
+        require_administrator(administrator_id)
+    except IdentityError as exc:
+        raise RemediationError(str(exc)) from exc
     remediation = _targeted_remediation(incident)
     if remediation.status != "SUCCEEDED" or remediation.previous_port_status is None:
         raise RemediationError("Rollback requires a successful remediation and an administrative-state snapshot.")
@@ -473,7 +479,7 @@ def rollback_interface_admin_action(
         _block_execution(incident, remediation, "switch_not_found_for_rollback")
     if is_port_protected(current_app.config["WHITELIST_PATH"], switch_id=remediation.switch_id, port_index=remediation.port_index):
         _block_execution(incident, remediation, "rollback_port_whitelisted")
-    if current_app.config["DRY_RUN"]:
+    if is_dry_run_enabled():
         return _dry_run_rollback_result(
             incident,
             remediation,
@@ -493,7 +499,7 @@ def rollback_interface_admin_action(
     write_client = client or SnmpRemediationClient(
         effective_config,
         registry,
-        dry_run=bool(current_app.config["DRY_RUN"]),
+        dry_run=is_dry_run_enabled(),
     )
     remediation.status = "ROLLBACK_IN_PROGRESS"
     incident.processing_status = "ROLLBACK_IN_PROGRESS"
@@ -565,7 +571,7 @@ def _has_snmp_preparation(incident_id: str) -> bool:
 def _send_integer_set(client: SnmpRemediationClient, object_ref, requested: int) -> str:
     """Single guarded gateway for every SNMP SET in the remediation service."""
 
-    if current_app.config["DRY_RUN"]:
+    if is_dry_run_enabled():
         raise UnsafeOperationBlocked("DRY_RUN=true blocks every SNMP SET")
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         raise UnsafeOperationBlocked("SNMP_WRITE_ENABLED=false")
@@ -683,6 +689,7 @@ def _dry_run_result(incident: Incident, remediation: Remediation, requested: int
         details={
             "execution_mode": "DRY_RUN",
             "outcome": "SIMULATED",
+            "write_result": "NO_WRITE",
             "requested_value": int(requested),
             "observed_value": observed,
             "snmp_set_executed": False,
@@ -724,6 +731,7 @@ def _dry_run_rollback_result(
         details={
             "execution_mode": "DRY_RUN",
             "outcome": "SIMULATED",
+            "write_result": "NO_WRITE",
             "requested_value": int(requested),
             "snmp_set_executed": False,
             "snmp_write_enabled": bool(current_app.config["SNMP_WRITE_ENABLED"]),

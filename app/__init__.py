@@ -18,6 +18,10 @@ def create_app(
     if overrides:
         app.config.update(overrides)
 
+    from .services.runtime_settings import apply_runtime_settings
+
+    apply_runtime_settings(app)
+
     db.init_app(app)
     migrate.init_app(app, db, render_as_batch=True)
 

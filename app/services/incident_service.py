@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy.exc import IntegrityError
+
 from app.extensions import db
 from app.models import Incident
 
@@ -23,6 +25,16 @@ def register_incident(payload: dict, playbooks_dir: Path) -> tuple[Incident, boo
         db.select(Incident).where(Incident.zabbix_event_id == zabbix_event_id)
     ).scalar_one_or_none()
     if existing is not None:
+        record_audit(
+            incident_id=existing.incident_id,
+            event_type="ZABBIX_DUPLICATE_IGNORED",
+            message="Duplicate Zabbix event ignored idempotently.",
+            equipment_ip=payload["host"].get("ip"),
+            incident_type=existing.incident_type,
+            result_status="DUPLICATE",
+            details={"zabbix_event_id": zabbix_event_id},
+        )
+        db.session.commit()
         return existing, True
 
     incident_type = payload["routing"].get("incident_type")
@@ -46,7 +58,24 @@ def register_incident(payload: dict, playbooks_dir: Path) -> tuple[Incident, boo
         processing_status="ROUTED",
     )
     db.session.add(incident)
-    db.session.flush()
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        concurrent = db.session.execute(
+            db.select(Incident).where(Incident.zabbix_event_id == zabbix_event_id)
+        ).scalar_one()
+        record_audit(
+            incident_id=concurrent.incident_id,
+            event_type="ZABBIX_DUPLICATE_IGNORED",
+            message="Concurrent duplicate Zabbix event ignored idempotently.",
+            equipment_ip=payload["host"].get("ip"),
+            incident_type=concurrent.incident_type,
+            result_status="DUPLICATE",
+            details={"zabbix_event_id": zabbix_event_id},
+        )
+        db.session.commit()
+        return concurrent, True
     record_audit(
         incident_id=incident.incident_id,
         event_type="ZABBIX_EVENT_ROUTED",
@@ -78,10 +107,31 @@ def register_recovery(payload: dict) -> Incident | None:
         db.select(Incident).where(Incident.zabbix_event_id == zabbix_event_id)
     ).scalar_one_or_none()
     if incident is None:
+        record_audit(
+            incident_id=None,
+            event_type="ZABBIX_RECOVERY_UNMATCHED",
+            message="Recovery event did not match a known incident.",
+            equipment_name=payload["host"].get("name"),
+            equipment_ip=payload["host"].get("ip"),
+            result_status="IGNORED",
+            details={"zabbix_event_id": zabbix_event_id},
+        )
+        db.session.commit()
         return None
     if incident.processing_status not in {
         "ROUTED", "IDENTIFYING_TARGET", "WAITING_ADMIN_APPROVAL", "ADMIN_APPROVED"
     }:
+        record_audit(
+            incident_id=incident.incident_id,
+            event_type="ZABBIX_RECOVERY_RECORDED",
+            message="Recovery event recorded without changing a terminal incident.",
+            equipment_name=payload["host"].get("name"),
+            equipment_ip=payload["host"].get("ip"),
+            incident_type=incident.incident_type,
+            result_status=incident.processing_status,
+            details={"zabbix_event_id": zabbix_event_id},
+        )
+        db.session.commit()
         return incident
     incident.processing_status = "RECOVERED_BEFORE_ACTION"
     for remediation in incident.remediations:

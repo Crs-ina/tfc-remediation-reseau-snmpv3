@@ -11,12 +11,19 @@ from app.extensions import db
 from app.models import Incident, NetworkHost, NetworkSwitch, SwitchPort
 from app.snmp.capabilities import CapabilityError, require_lab_validated_write
 from app.snmp.client import SnmpReadClient, SnmpV3Config
-from app.snmp.mib_catalog import DOT1D_BASE_PORT_IF_INDEX, DOT1Q_PVID, IF_ADMIN_STATUS, IF_DESCR
+from app.snmp.mib_catalog import (
+    DOT1D_BASE_PORT_IF_INDEX,
+    DOT1Q_PVID,
+    IF_ADMIN_STATUS,
+    IF_DESCR,
+    IF_OPER_STATUS,
+)
 from app.snmp.mib_registry import MibRegistry
 from app.snmp.target_resolver import (
     AmbiguousTargetError,
     KnownPortHint,
     SnmpTargetResolver,
+    TargetMismatchError,
     TargetNotFoundError,
     TargetResolution,
     TargetResolutionError,
@@ -54,6 +61,97 @@ class PortTargetResolution:
     previous_if_admin_status: str
     previous_pvid: int | None
     target_mac: str | None = None
+
+
+@dataclass(frozen=True)
+class PhysicalDisconnectionCheck:
+    bridge_port: int
+    if_index: int
+    interface_name: str
+    if_admin_status: str
+    if_oper_status: str
+
+
+def inspect_physical_disconnection_with_snmp(
+    incident: Incident,
+    *,
+    switch_id: str,
+    bridge_port: int,
+    client: SnmpReadClient | None = None,
+    snmp_config: SnmpV3Config | None = None,
+) -> PhysicalDisconnectionCheck:
+    """Perform the playbook's optional read-only status checks and escalate."""
+
+    if incident.incident_type != "physical_disconnection":
+        raise SnmpPreparationBlocked("This check is only for physical_disconnection.")
+    network_switch = db.session.get(NetworkSwitch, switch_id)
+    if network_switch is None:
+        raise SnmpPreparationBlocked("Switch not found in inventory.")
+    registry: MibRegistry = current_app.extensions["snmp_mib_registry"]
+    if not registry.status.ready:
+        _block_preparation(
+            incident,
+            event_type="MIB_NOT_READY",
+            message="Physical-disconnection checks require the local MIB registry.",
+            details={"error": registry.status.error},
+        )
+    effective_config = snmp_config or SnmpV3Config.from_env(
+        host=network_switch.management_ip
+    )
+    read_client = client or SnmpReadClient(effective_config, registry)
+    try:
+        if_index = int(
+            asyncio.run(
+                read_client.read_scalar(
+                    DOT1D_BASE_PORT_IF_INDEX.with_indices(bridge_port)
+                )
+            )
+        )
+        interface_name = str(
+            asyncio.run(read_client.read_scalar(IF_DESCR.with_indices(if_index)))
+        )
+        if_admin_status = str(
+            asyncio.run(
+                read_client.read_scalar(IF_ADMIN_STATUS.with_indices(if_index))
+            )
+        )
+        if_oper_status = str(
+            asyncio.run(read_client.read_scalar(IF_OPER_STATUS.with_indices(if_index)))
+        )
+    except (ValueError, RuntimeError) as exc:
+        _block_preparation(
+            incident,
+            event_type="PHYSICAL_DISCONNECTION_CHECK_FAILED",
+            message="Physical-disconnection status checks failed; human intervention is required.",
+            details={"error": str(exc)},
+        )
+    incident.processing_status = "ESCALATED_NO_REMEDIATION"
+    record_audit(
+        incident_id=incident.incident_id,
+        event_type="PHYSICAL_DISCONNECTION_CHECKED",
+        message="Read-only ifAdminStatus/ifOperStatus checks completed; no SET is allowed.",
+        equipment_name=network_switch.name,
+        equipment_ip=network_switch.management_ip,
+        port_index=bridge_port,
+        incident_type=incident.incident_type,
+        action_type="NO_ACTION",
+        result_status="ESCALATED_NO_REMEDIATION",
+        details={
+            "if_index": if_index,
+            "interface_name": interface_name,
+            "if_admin_status": if_admin_status,
+            "if_oper_status": if_oper_status,
+            "snmp_set_executed": False,
+        },
+    )
+    db.session.commit()
+    return PhysicalDisconnectionCheck(
+        bridge_port,
+        if_index,
+        interface_name,
+        if_admin_status,
+        if_oper_status,
+    )
 
 
 def prepare_port_incident_with_snmp(
@@ -129,7 +227,7 @@ def prepare_incident_with_snmp(
     incident: Incident,
     *,
     switch_id: str,
-    target_mac: str,
+    target_mac: str | None,
     target_ip: str | None = None,
     client: SnmpReadClient | None = None,
     snmp_config: SnmpV3Config | None = None,
@@ -176,8 +274,12 @@ def prepare_incident_with_snmp(
             details={"error": str(exc), "model": network_switch.model},
         )
 
-    normalized_mac = normalize_mac(target_mac)
-    known_hint = _known_port_hint(switch_id, normalized_mac)
+    if not target_mac and not target_ip:
+        raise SnmpPreparationBlocked("An IP or MAC target hint is required.")
+    normalized_mac = normalize_mac(target_mac) if target_mac else None
+    known_hint = (
+        _known_port_hint(switch_id, normalized_mac) if normalized_mac else None
+    )
     read_client = client or SnmpReadClient(effective_config, mib_registry)
     resolver = SnmpTargetResolver(read_client)
 
@@ -186,8 +288,16 @@ def prepare_incident_with_snmp(
         resolution = _resolve_with_retry(
             resolver,
             normalized_mac,
+            target_ip=target_ip,
             known_port=known_hint,
             max_attempts=2,
+        )
+    except TargetMismatchError as exc:
+        _block_preparation(
+            incident,
+            event_type="TARGET_MISMATCH",
+            message="The Zabbix IP/MAC hints do not match the SNMP observations.",
+            details={"error": str(exc), "target_ip": target_ip, "target_mac": normalized_mac},
         )
     except AmbiguousTargetError as exc:
         _block_preparation(
@@ -260,8 +370,9 @@ def prepare_incident_with_snmp(
 
 def _resolve_with_retry(
     resolver: SnmpTargetResolver,
-    target_mac: str,
+    target_mac: str | None,
     *,
+    target_ip: str | None,
     known_port: KnownPortHint | None,
     max_attempts: int,
 ) -> TargetResolution:
@@ -269,7 +380,9 @@ def _resolve_with_retry(
     for _attempt in range(max_attempts):
         try:
             return asyncio.run(
-                resolver.resolve(target_mac, known_port=known_port)
+                resolver.resolve(
+                    target_mac, ip_address=target_ip, known_port=known_port
+                )
             )
         except TargetNotFoundError as exc:
             last_error = exc

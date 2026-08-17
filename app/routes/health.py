@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from app.extensions import db
 from app.services.calendar_policy import load_automation_schedule
+from app.services.runtime_settings import is_dry_run_enabled
 from app.snmp.capabilities import load_capabilities
 
 
@@ -60,6 +61,6 @@ def health():
             "checks": checks,
             "errors": errors,
             "write_enabled": bool(current_app.config["SNMP_WRITE_ENABLED"]),
-            "dry_run": bool(current_app.config["DRY_RUN"]),
+            "dry_run": is_dry_run_enabled(),
         }
     )

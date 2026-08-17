@@ -82,7 +82,13 @@ def test_mld_column_sets_are_exact(app):
         "switch_ports": {"switch_id", "port_index", "port_name", "status", "vlan_id"},
         "network_hosts": {"mac_address", "ip_address", "switch_id", "port_index"},
         "network_switches": {"switch_id", "name", "management_ip", "model"},
-        "administrators": {"administrator_id", "username", "password_hash", "is_active", "created_at", "last_login_at"},
+        "administrators": {
+            "administrator_id",
+            "system_username",
+            "display_name",
+            "created_at",
+            "last_seen_at",
+        },
     }
     with app.app_context():
         database = inspect(db.engine)
@@ -191,7 +197,7 @@ def test_model_relationships_and_foreign_keys(app):
             previous_port_status="up",
             previous_vlan_id=10,
         )
-        administrator = Administrator(username="operator", password_hash="not-a-password-hash")
+        administrator = Administrator(system_username="operator", display_name="Operator")
         log = AuditLog(
             incident=incident,
             remediation=remediation,
@@ -218,6 +224,12 @@ def test_model_relationships_and_foreign_keys(app):
         assert log.incident is incident
         assert log.remediation is remediation
         assert log.administrator is administrator
+        assert log.to_dict()["administrator"] == "operator"
+
+        system_log = AuditLog(event_type="SYSTEM_EVENT", message="test")
+        db.session.add(system_log)
+        db.session.commit()
+        assert system_log.to_dict()["administrator"] == "SYSTEM"
 
 
 def test_whitelist_and_schedule_are_external_configuration(tmp_path):

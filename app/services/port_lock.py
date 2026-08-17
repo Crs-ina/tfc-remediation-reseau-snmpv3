@@ -36,11 +36,11 @@ def _lock(handle) -> None:
                 handle.write(b"0")
                 handle.flush()
             handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         else:
             import fcntl
 
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except (OSError, BlockingIOError) as exc:
         raise PortBusyError("Another remediation is already acting on this port.") from exc
 

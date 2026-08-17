@@ -56,6 +56,7 @@ REQUIRED_MIB_MODULES: tuple[str, ...] = (
     "IF-MIB",
     "BRIDGE-MIB",
     "Q-BRIDGE-MIB",
+    "IP-MIB",
 )
 
 WARMUP_OBJECTS: tuple[MibObjectRef, ...] = (
@@ -65,6 +66,7 @@ WARMUP_OBJECTS: tuple[MibObjectRef, ...] = (
     DOT1D_BASE_PORT_IF_INDEX,
     IF_DESCR,
     DOT1Q_PVID,
+    IP_NET_TO_PHYSICAL_ADDRESS,
 )
 
 MIB_PROBES: tuple[MibProbe, ...] = (

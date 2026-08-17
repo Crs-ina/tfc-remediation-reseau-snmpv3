@@ -83,6 +83,9 @@ class Config:
 
     SNMP_WRITE_ENABLED = env_bool("SNMP_WRITE_ENABLED", False)
     DRY_RUN = env_bool("DRY_RUN", False)
+    RUNTIME_SETTINGS_PATH = config_path(
+        "RUNTIME_SETTINGS_PATH", "data/runtime-settings.json"
+    )
     REMEDIATION_MAX_ATTEMPTS = int(os.getenv("REMEDIATION_MAX_ATTEMPTS", "2"))
     REMEDIATION_COOLDOWN_SECONDS = int(os.getenv("REMEDIATION_COOLDOWN_SECONDS", "60"))
     PORT_LOCK_DIR = config_path("PORT_LOCK_DIR", "data/port-locks")

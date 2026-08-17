@@ -14,12 +14,18 @@ python -m pip install -e .
 okapi
 ```
 
-It displays the ASCII OKAPI banner, offers protected account creation and
-login, then retains the authenticated administrator only for that CLI process.
-The normal menu uses numbered incident selections rather than internal IDs.
-Approve/Refuse decisions and requested rollbacks are linked to the logged-in
-administrator in `audit_logs`. Passwords are stored only as Werkzeug password
-hashes.
+It displays the ASCII OKAPI banner and resolves the Linux account that launched
+the command. The corresponding `ADMINISTRATOR` identity is created
+automatically when absent and is used only for traceability. Linux/SSH owns
+accounts and primary authentication; OKAPI stores no password or password
+hash. Critical actions use an interactive `sudo`/PAM reauthentication whose
+password exchange remains outside the Python process.
+
+The final English menu exposes Pending incidents, All incidents, Incident
+details, Approve remediation, Reject remediation, Remediation history, Audit
+logs, Rollback, Dry-run mode, System status and Logout / Exit. Human decisions
+are linked to `administrator_id`; system events display
+`Administrator : SYSTEM`.
 
 The startup identity is responsive and genuinely randomized across multiple
 Okapi poses, title styles, layouts, ANSI palettes, decorations and short boot
@@ -66,19 +72,18 @@ Le projet traite exactement sept routes fonctionnelles :
 - `vlan_policy_violation` → `PB-VLAN-POLICY-001` ;
 - tout autre type → `PB-UNKNOWN-001`.
 
-Les chemins d'écriture implémentés utilisent :
+Le seul chemin d'écriture activable utilise :
 
 ```text
 Q-BRIDGE-MIB::dot1qPvid.<bridge_port>
-IF-MIB::ifAdminStatus.<ifIndex>
 ```
 
 Seul `dot1qPvid` est marqué `LAB_VALIDATED`, uniquement pour **Arista vEOS 4.29.2F**
 dans EVE-NG, avec SNMPv3 `authPriv`, SHA-256 et AES-256. UniFi reste
-`TO_BE_VALIDATED` et toute écriture y est bloquée. Les SET `ifAdminStatus`
-down/up sont implémentés derrière le capability gate mais restent également
-`TO_BE_VALIDATED` : ils ne sont donc pas envoyés tant qu'un essai réel ne les
-qualifie pas.
+`TO_BE_VALIDATED` et toute écriture y est bloquée. Les actions
+`SHUTDOWN_PORT` et `REACTIVATE_PORT` sont routées et simulables en dry-run,
+mais les SET `ifAdminStatus` restent `TO_BE_VALIDATED` et le transport SNMP les
+refuse même si une configuration de capacité était modifiée par erreur.
 
 ## Politique de sécurité
 
@@ -102,6 +107,11 @@ qualifie pas.
   SNMP SET, y compris les rollbacks. L’action est auditée avec
   `event_type=DRY_RUN` et `result_status=SIMULATED` ; elle n’est jamais
   présentée comme une remédiation réellement réussie.
+- Le menu `Dry-run mode` permet Enable/Disable après réauthentification
+  système. La valeur persistante est stockée dans le fichier local ignoré
+  `data/runtime-settings.json`; un fichier invalide force le dry-run à ON.
+- L'approbation d'une action disruptive réelle, tout rollback et toute
+  modification du dry-run exigent une réauthentification Linux/PAM.
 - Le rollback n’est jamais automatique : un administrateur doit le demander,
   puis un SET remet le `previous_pvid` et un GET le vérifie.
 - Les clés d’authentification et de confidentialité sont masquées dans les
@@ -117,7 +127,7 @@ obligatoires et résout les noms symboliques dans un cache local :
 - `IF-MIB` ;
 - `BRIDGE-MIB` ;
 - `Q-BRIDGE-MIB` ;
-- `IP-MIB` reste optionnelle pour la découverte.
+- `IP-MIB`.
 
 Il n’y a aucun téléchargement Internet dans le chemin d’un incident. Si le
 paquet ou un répertoire MIB configuré manque, `/health` expose
@@ -127,10 +137,11 @@ références comme `Q-BRIDGE-MIB::dot1qPvid`, résolues localement au démarrage
 
 ## Identification et chemin rapide « port connu »
 
-La première identification suit cette chaîne en lecture seule :
+Pour un conflit IP, l'identification suit cette chaîne en lecture seule :
 
 ```text
-MAC normalisée
+IP-MIB::ipNetToPhysicalPhysAddress
+  → MAC observée et comparaison avec l'indice Zabbix
   → WALK Q-BRIDGE-MIB::dot1qTpFdbPort
   → bridge_port
   → BRIDGE-MIB::dot1dBasePortIfIndex
@@ -206,9 +217,9 @@ Points d’entrée :
 ## Interface et maintenance
 
 L'interface quotidienne est `okapi`. Elle couvre les incidents, décisions,
-historique, audit, rollback, état du système et gestion minimale des comptes,
-sans afficher les identifiants internes. Les commandes Flask suivantes restent
-des outils avancés de maintenance.
+historique, audit, rollback, dry-run et état du système, sans afficher les
+identifiants internes. OKAPI ne crée, ne désactive et ne supprime aucun compte.
+Les commandes Flask suivantes restent des outils avancés de maintenance.
 
 Le menu `System status` expose l’état effectif, et non seulement le drapeau
 d’écriture configuré :
@@ -237,15 +248,15 @@ snapshot avant l’approbation :
 flask --app run.py snmp discover --host 192.0.2.10
 
 flask --app run.py remediation prepare-snmp INCIDENT_ID --switch-id SWITCH_ID --target-mac 00:50:79:66:68:03 --target-ip 192.0.2.50
-flask --app run.py remediation approve INCIDENT_ID --administrator admin-ulc-icam
+flask --app run.py remediation approve INCIDENT_ID
 flask --app run.py remediation execute INCIDENT_ID
 ```
 
 Refus et rollback explicites :
 
 ```powershell
-flask --app run.py remediation refuse INCIDENT_ID --administrator admin-ulc-icam
-flask --app run.py remediation rollback INCIDENT_ID --administrator admin-ulc-icam
+flask --app run.py remediation refuse INCIDENT_ID
+flask --app run.py remediation rollback INCIDENT_ID
 ```
 
 Une remédiation préparée manuellement avec l’ancienne commande `evaluate`,

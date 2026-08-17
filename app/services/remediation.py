@@ -16,6 +16,7 @@ from app.models import (
 )
 
 from .audit import record_audit
+from .administrators import IdentityError, require_administrator
 from .calendar_policy import CalendarPolicy
 from .rules import (
     PlaybookRepository,
@@ -190,6 +191,10 @@ def _claim_human_decision(incident: Incident, administrator_id: str, target_stat
 
 
 def approve_incident(incident: Incident, administrator_id: str) -> Remediation:
+    try:
+        require_administrator(administrator_id)
+    except IdentityError as exc:
+        raise RemediationError(str(exc)) from exc
     _claim_human_decision(incident, administrator_id, "ADMIN_APPROVED")
     previous_state = "WAITING_ADMIN_APPROVAL"
     remediation = _latest_remediation_or_fail(incident)
@@ -215,6 +220,10 @@ def approve_incident(incident: Incident, administrator_id: str) -> Remediation:
 
 
 def refuse_incident(incident: Incident, administrator_id: str) -> Remediation:
+    try:
+        require_administrator(administrator_id)
+    except IdentityError as exc:
+        raise RemediationError(str(exc)) from exc
     _claim_human_decision(incident, administrator_id, "REJECTED_BY_ADMIN")
     previous_state = "WAITING_ADMIN_APPROVAL"
     remediation = _latest_remediation_or_fail(incident)

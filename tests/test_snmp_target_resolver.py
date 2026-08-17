@@ -8,12 +8,14 @@ from app.snmp.mib_catalog import (
     DOT1Q_PVID,
     DOT1Q_TP_FDB_PORT,
     IF_DESCR,
+    IP_NET_TO_PHYSICAL_ADDRESS,
     MibObjectRef,
 )
 from app.snmp.target_resolver import (
     AmbiguousTargetError,
     KnownPortHint,
     SnmpTargetResolver,
+    TargetMismatchError,
     normalize_mac,
     parse_qbridge_fdb_entry,
 )
@@ -32,8 +34,13 @@ def fdb_row(vlan_id: int, bridge_port: int) -> SnmpWalkEntry:
 
 
 class FakeResolverClient:
-    def __init__(self, rows: list[SnmpWalkEntry]) -> None:
+    def __init__(
+        self,
+        rows: list[SnmpWalkEntry],
+        ip_rows: list[SnmpWalkEntry] | None = None,
+    ) -> None:
         self.rows = rows
+        self.ip_rows = ip_rows or []
         self.walk_calls = 0
         self.reads: list[MibObjectRef] = []
 
@@ -41,6 +48,8 @@ class FakeResolverClient:
         self, column_ref: MibObjectRef, *, max_rows: int = 4096
     ) -> list[SnmpWalkEntry]:
         self.walk_calls += 1
+        if column_ref == IP_NET_TO_PHYSICAL_ADDRESS:
+            return self.ip_rows
         assert column_ref == DOT1Q_TP_FDB_PORT
         return self.rows
 
@@ -121,4 +130,39 @@ def test_ambiguous_fdb_location_blocks_resolution():
     with pytest.raises(AmbiguousTargetError):
         asyncio.run(
             SnmpTargetResolver(client).resolve("00:50:79:66:68:03")
+        )
+
+
+def test_ip_conflict_confirms_ip_to_mac_before_bridge_resolution():
+    ip_row = SnmpWalkEntry(
+        object_ref=IP_NET_TO_PHYSICAL_ADDRESS,
+        oid=(1, 3, 6, 7, 1, 4, 192, 0, 2, 50),
+        suffix=(7, 1, 4, 192, 0, 2, 50),
+        value="0x005079666803",
+    )
+    client = FakeResolverClient([fdb_row(10, 2)], [ip_row])
+
+    result = asyncio.run(
+        SnmpTargetResolver(client).resolve(None, ip_address="192.0.2.50")
+    )
+
+    assert result.target_mac == "00:50:79:66:68:03"
+    assert result.bridge_port == 2
+    assert client.walk_calls == 2
+
+
+def test_ip_mac_hint_mismatch_fails_closed():
+    ip_row = SnmpWalkEntry(
+        object_ref=IP_NET_TO_PHYSICAL_ADDRESS,
+        oid=(1, 3, 6, 7, 1, 4, 192, 0, 2, 50),
+        suffix=(7, 1, 4, 192, 0, 2, 50),
+        value="0x005079666803",
+    )
+    client = FakeResolverClient([fdb_row(10, 2)], [ip_row])
+
+    with pytest.raises(TargetMismatchError):
+        asyncio.run(
+            SnmpTargetResolver(client).resolve(
+                "00:11:22:33:44:55", ip_address="192.0.2.50"
+            )
         )

@@ -6,8 +6,9 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.extensions import db
-from app.models import Incident, NetworkSwitch, Remediation, SwitchPort
+from app.models import Administrator, Incident, NetworkSwitch, Remediation, SwitchPort
 from app.services.remediation import (
+    RemediationError,
     UnsafeOperationBlocked,
     approve_incident,
     evaluate_incident,
@@ -40,7 +41,8 @@ def test_human_approval_creates_targeted_remediation_but_feature_flag_blocks_wri
             processing_status="ROUTED",
             playbook_id="PB-LOOP-001",
         )
-        db.session.add_all([network_switch, port, incident])
+        administrator = Administrator(system_username="admin-test")
+        db.session.add_all([network_switch, port, incident, administrator])
         db.session.commit()
 
         decision = evaluate_incident(
@@ -59,7 +61,52 @@ def test_human_approval_creates_targeted_remediation_but_feature_flag_blocks_wri
         assert remediation.previous_port_status == "up"
         assert remediation.previous_vlan_id == 10
 
-        approve_incident(incident, "admin-test")
+        approve_incident(incident, administrator.administrator_id)
         with pytest.raises(UnsafeOperationBlocked):
             execute_authorized_remediation(incident)
         assert incident.processing_status == "BLOCKED_SNMP_WRITE"
+
+
+def test_waiting_incident_never_becomes_automatic_when_time_changes(app):
+    with app.app_context():
+        network_switch = NetworkSwitch(
+            switch_id="sw-wait",
+            name="EVE-NG-SW-WAIT",
+            management_ip="192.0.2.11",
+            model="Arista vEOS 4.29.2F",
+        )
+        port = SwitchPort(
+            network_switch=network_switch,
+            port_index=2,
+            port_name="Ethernet2",
+            status="up",
+            vlan_id=10,
+        )
+        incident = Incident(
+            incident_type="network_loop",
+            zabbix_event_id="evt-waiting-stays-waiting",
+            processing_status="ROUTED",
+            playbook_id="PB-LOOP-001",
+        )
+        db.session.add_all([network_switch, port, incident])
+        db.session.commit()
+        evaluate_incident(
+            incident,
+            target_confirmed=True,
+            target_mac_address=None,
+            switch_id="sw-wait",
+            port_index=2,
+            now=datetime(2026, 8, 10, 10, 0, tzinfo=ZoneInfo("Africa/Kinshasa")),
+        )
+        assert incident.processing_status == "WAITING_ADMIN_APPROVAL"
+
+        with pytest.raises(RemediationError, match="elapsed time is not authorization"):
+            evaluate_incident(
+                incident,
+                target_confirmed=True,
+                target_mac_address=None,
+                switch_id="sw-wait",
+                port_index=2,
+                now=datetime(2026, 8, 10, 23, 0, tzinfo=ZoneInfo("Africa/Kinshasa")),
+            )
+        assert incident.processing_status == "WAITING_ADMIN_APPROVAL"

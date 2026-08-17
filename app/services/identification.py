@@ -34,7 +34,8 @@ def identify_target(
     max_attempts: int = 2,
 ) -> IdentificationResult:
     last_error = "target_not_resolved"
-    for attempt in range(1, max_attempts + 1):
+    attempts_limit = max(1, min(int(max_attempts), 2))
+    for attempt in range(1, attempts_limit + 1):
         observed_mac = resolver.ip_to_mac(client_ip) if client_ip else client_mac_hint
         if not observed_mac:
             last_error = "mac_not_resolved"
@@ -68,7 +69,7 @@ def identify_target(
 
     return IdentificationResult(
         confirmed=False,
-        attempts=max_attempts,
+        attempts=attempts_limit,
         client_ip=client_ip,
         client_mac=client_mac_hint,
         error=last_error,

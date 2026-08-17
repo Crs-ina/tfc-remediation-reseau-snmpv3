@@ -5,6 +5,11 @@ The checked-in unit runs one Gunicorn worker on `127.0.0.1:5000`. Copy
 in `.venv`, then run `sudo bash deploy/install.sh` from the documented
 `/home/exauceeadm/tfc-remediation-reseau-snmpv3` deployment.
 
+Each Linux account allowed to operate the interactive `okapi` CLI must be able
+to complete `sudo -k` followed by `sudo -v`; OKAPI uses that PAM-backed check
+for critical reauthentication and never reads the password itself. Linux/SSH,
+not OKAPI, owns account provisioning and removal.
+
 Verify with:
 
 ```bash

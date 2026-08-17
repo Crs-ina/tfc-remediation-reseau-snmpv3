@@ -35,6 +35,7 @@ instance/
 data/*.db
 data/*.sqlite
 data/port-locks/
+data/runtime-settings.json
 *.log
 
 # Packaging Python

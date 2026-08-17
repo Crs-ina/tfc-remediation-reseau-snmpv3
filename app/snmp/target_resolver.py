@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from ipaddress import IPv4Address
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -10,6 +11,7 @@ from .mib_catalog import (
     DOT1Q_PVID,
     DOT1Q_TP_FDB_PORT,
     IF_DESCR,
+    IP_NET_TO_PHYSICAL_ADDRESS,
     MibObjectRef,
 )
 
@@ -23,6 +25,10 @@ class TargetNotFoundError(TargetResolutionError):
 
 
 class AmbiguousTargetError(TargetResolutionError):
+    pass
+
+
+class TargetMismatchError(TargetResolutionError):
     pass
 
 
@@ -91,17 +97,50 @@ def parse_qbridge_fdb_entry(entry: SnmpWalkEntry) -> FdbEntry:
     )
 
 
+def parse_ip_net_to_physical_entry(entry: SnmpWalkEntry) -> tuple[str, str] | None:
+    """Parse the standard IPv4 index/value without maintaining a numeric OID."""
+
+    if entry.object_ref.key != IP_NET_TO_PHYSICAL_ADDRESS.key:
+        raise ValueError(f"Objet IP-MIB inattendu: {entry.object_ref.key}")
+    suffix = entry.suffix
+    if len(suffix) >= 7 and suffix[-6] == 1 and suffix[-5] == 4:
+        octets = suffix[-4:]
+    elif len(suffix) >= 6 and suffix[-5] == 1:
+        # Some agents render InetAddress indexes without the explicit length.
+        octets = suffix[-4:]
+    else:
+        return None
+    if any(octet < 0 or octet > 255 for octet in octets):
+        return None
+    raw_mac = entry.value.strip()
+    if raw_mac.lower().startswith("0x"):
+        raw_mac = raw_mac[2:]
+    return str(IPv4Address(bytes(octets))), normalize_mac(raw_mac)
+
+
 class SnmpTargetResolver:
     def __init__(self, client: TargetReadClient) -> None:
         self.client = client
 
     async def resolve(
         self,
-        mac_address: str,
+        mac_address: str | None,
         *,
+        ip_address: str | None = None,
         known_port: KnownPortHint | None = None,
     ) -> TargetResolution:
-        target_mac = normalize_mac(mac_address)
+        mac_hint = normalize_mac(mac_address) if mac_address else None
+        if ip_address:
+            observed_mac = await self._ip_to_mac(ip_address)
+            if mac_hint and observed_mac != mac_hint:
+                raise TargetMismatchError(
+                    f"IP-MIB maps {ip_address} to {observed_mac}, not {mac_hint}"
+                )
+            target_mac = observed_mac
+        elif mac_hint:
+            target_mac = mac_hint
+        else:
+            raise TargetNotFoundError("Neither an IP nor a MAC target hint is available.")
         fdb_entry: FdbEntry | None = None
         cache_hit = False
 
@@ -170,3 +209,27 @@ class SnmpTargetResolver:
             previous_pvid=previous_pvid,
             cache_hit=cache_hit,
         )
+
+    async def _ip_to_mac(self, ip_address: str) -> str:
+        try:
+            expected_ip = str(IPv4Address(ip_address))
+        except ValueError as exc:
+            raise TargetResolutionError(f"Invalid target IPv4 address: {ip_address}") from exc
+        rows = await self.client.walk(IP_NET_TO_PHYSICAL_ADDRESS)
+        matches: set[str] = set()
+        for row in rows:
+            try:
+                parsed = parse_ip_net_to_physical_entry(row)
+            except ValueError as exc:
+                raise TargetResolutionError(f"Invalid IP-MIB target entry: {exc}") from exc
+            if parsed and parsed[0] == expected_ip:
+                matches.add(parsed[1])
+        if not matches:
+            raise TargetNotFoundError(
+                f"IP absent from IP-MIB::ipNetToPhysicalPhysAddress: {expected_ip}"
+            )
+        if len(matches) != 1:
+            raise AmbiguousTargetError(
+                f"IP maps to multiple MAC addresses: {sorted(matches)}"
+            )
+        return matches.pop()
