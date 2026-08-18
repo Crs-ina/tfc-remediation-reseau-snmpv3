@@ -1,93 +1,122 @@
 # Rapport de synchronisation du backlog GitHub Project
 
-_Date de l’audit : 18 août 2026_
+_Date de synchronisation : 18 août 2026_
+
+## Périmètre
+
+- Repository : `Crs-ina/tfc-remediation-reseau-snmpv3`.
+- Project : `Suivi TFC - Remédiation réseau` (Project n° 1).
+- Source de planification : Gantt révisé fourni par l’étudiante.
+- Période de planification : du `2026-04-15` au `2026-08-20`.
+
+Les dates ci-dessous sont des dates de planification. Elles ne remplacent pas les dates historiques des commits, des créations de fichiers ou des fermetures d’issues.
 
 ## État initial
 
-- Project concerné : `Crs-ina / Suivi TFC - Remédiation réseau` (Project n° 1).
-- Les captures fournies montrent 37 items : 15 `Todo`, 7 `In Progress`, 15 `Done` et 0 `blocked`.
-- Les champs visibles sont notamment : Title, Assignees, Status, Linked pull requests, Sub-issues progress, Sprint, Priority et dates.
-- Le dépôt comptait 39 issues, dont deux doublons documentaires ouverts.
-- Aucun pull request n’est présent.
-- La branche `main` ne contient que les documents initiaux ; le prototype fonctionnel est présent sur `feat/snmpv3-arista-remediation`.
+### État historique déjà conservé
 
-## Preuves analysées
+- Les captures initiales montraient 37 cartes.
+- Les issues #1 et #4 avaient déjà été conservées puis fermées comme doublons de #7 et #5.
+- Les issues atomiques #40 à #49 avaient déjà été créées et ajoutées au Project.
 
-La branche d’implémentation contient notamment :
+### État au début de cette synchronisation
 
-- le prototype OKAPI Flask/SQLAlchemy/SQLite ;
-- les clients SNMPv3 et le routage IP → MAC → port ;
-- les playbooks JSON ;
-- les protections whitelist, dry-run, rollback, audit et capacité fail-closed ;
-- l’unité systemd et la route `/health` ;
-- les tests automatisés et le rapport final d’implémentation.
+- 47 cartes dans le Project.
+- 19 cartes `Done`.
+- 6 cartes `In Progress`.
+- 22 cartes `Todo`.
+- 0 carte `blocked`.
+- 17 champs déclarés, dont `Status`, `Sprint `, `Priority` et `Due date`.
+- Aucun champ `Start date`.
+- 24 cartes sans sprint.
+- 23 cartes sans priorité.
+- 24 cartes sans date de fin.
+- 13 issues sans assignee.
 
-Le rapport `docs/FINAL_IMPLEMENTATION_REPORT.md` indique 111 tests réussis et 3 tests d’intégration EVE-NG volontairement ignorés. Les flux matériels restant à rejouer ont été convertis en issues atomiques.
+## Planning de référence appliqué
+
+| Phase | Début | Fin |
+|---|---:|---:|
+| Phase 1 — Finalisation de la conception | 2026-04-15 | 2026-04-30 |
+| Phase 2 — Laboratoire et connectivité | 2026-04-27 | 2026-05-22 |
+| Phase 3 — Développement du module de détection | 2026-05-18 | 2026-07-03 |
+| Phase 4 — Remédiation et interface | 2026-07-01 | 2026-08-14 |
+| Phase 5 — Tests et finalisation | 2026-08-10 | 2026-08-20 |
+
+Les intervalles détaillés des tâches ont été repris des captures `gan1.png` et `gan2.png`. Aucun item n’a reçu une date postérieure au 20 août 2026.
 
 ## Modifications réalisées
 
-### Doublons fermés
+### Project et champs
 
-- #1 — fermé avec le motif `duplicate` : doublon de #7.
-- #4 — fermé avec le motif `duplicate` : doublon de #5.
+- Conservation du Project existant et de ses deux vues.
+- Conservation des 47 cartes existantes.
+- Création du champ `Start date` de type date.
+- Remplissage de `Start date` et `Due date` pour les 47 cartes.
+- Remplissage de `Sprint ` pour les 47 cartes.
+- Remplissage de `Priority` pour les 47 cartes.
+- Affectation à `Crs-ina` des 13 issues qui n’avaient pas encore d’assignee.
+- Aucun changement arbitraire des statuts : les preuves déjà auditées restent la référence.
 
-Chaque fermeture comporte un commentaire expliquant le rattachement. Aucun contenu ni issue n’a été supprimé.
+### Sprints
 
-### Issues existantes fiabilisées
+Les trois sprints historiques ont été conservés et les sprints 4 à 9 ont été ajoutés pour prolonger le suivi jusqu’au 20 août 2026.
 
-- #28 renommée en **Décrire la désactivation d’une interface** et complétée avec un objectif, un périmètre, des critères d’acceptation, des preuves attendues et une dépendance de qualification.
-- #35 renommée en **Documenter le mode dry-run de la remédiation**, complétée avec des preuves de code et de tests, puis fermée comme terminée.
-- #39 renommée en **Rédiger le playbook du conflit d’adresse IP**, complétée avec les preuves du playbook versionné et des tests, puis fermée comme terminée.
+| Sprint | Période | Cartes |
+|---|---:|---:|
+| Sprint 1 | 2026-06-22 → 2026-06-28 | 5 |
+| Sprint 2 | 2026-06-29 → 2026-07-05 | 9 |
+| Sprint 3 | 2026-07-06 → 2026-07-12 | 17 |
+| Sprint 4 | 2026-07-13 → 2026-07-19 | 2 |
+| Sprint 5 | 2026-07-20 → 2026-07-26 | 1 |
+| Sprint 6 | 2026-07-27 → 2026-08-02 | 1 |
+| Sprint 7 | 2026-08-03 → 2026-08-09 | 1 |
+| Sprint 8 | 2026-08-10 → 2026-08-16 | 8 |
+| Sprint 9 | 2026-08-17 → 2026-08-20 | 3 |
 
-Ces trois issues sont assignées à `Crs-ina`.
+### Priorités
 
-### Nouvelles issues atomiques
-
-- #40 — Vérifier l’isolement du VLAN 18 dans EVE-NG.
-- #41 — Tester le rollback du VLAN de quarantaine.
-- #42 — Décrire la réactivation d’une interface.
-- #43 — Tester la mise en quarantaine dans le VLAN 18.
-- #44 — Tester la chaîne Zabbix vers le webhook OKAPI.
-- #45 — Tester le transport SNMPv3 TRAP vers Zabbix.
-- #46 — Tester le transport SNMPv3 INFORM vers Zabbix.
-- #47 — Vérifier l’endpoint /health après déploiement.
-- #48 — Qualifier les actions ifAdminStatus sur Arista vEOS.
-- #49 — Déployer le backend OKAPI avec systemd.
-
-Toutes ces issues :
-
-- ont un titre à action unique ;
-- sont assignées à `Crs-ina` ;
-- contiennent Objectif, Contexte, Périmètre, Hors périmètre, Livrable attendu, Critères d’acceptation, Preuve attendue, Dépendances et Référence TFC ;
-- restent ouvertes, car une preuve de laboratoire ou de déploiement reste nécessaire.
+- 26 cartes `Critical`.
+- 19 cartes `High`.
+- 2 cartes `Medium`.
+- 0 carte `Low`.
 
 ## Doublons
 
-- #1 → #7.
-- #4 → #5.
-
-Aucune issue existante n’a été supprimée.
+- #1 reste fermé comme doublon de #7.
+- #4 reste fermé comme doublon de #5.
+- Aucun doublon n’a été créé ou supprimé pendant cette synchronisation.
 
 ## Points volontairement non modifiés
 
-Les items de conception et de documentation qui n’ont pas de preuve de fichier directement identifiable restent inchangés, notamment les diagrammes et les sections du mémoire. Leur statut ne doit pas être déduit d’une date ou d’un intitulé seul.
+- Aucun item, issue ou sous-issue supprimé.
+- Aucun statut déplacé vers `Done` sans preuve supplémentaire.
+- Aucune relation parent/sous-issue cassée.
+- Aucune vue recréée ou supprimée.
+- Aucun champ utile supprimé.
+- Aucun titre d’issue modifié pendant cette passe.
 
 ## Points à vérifier avec l’étudiante
 
-- Rejouer les tests matériels EVE-NG et documenter les preuves dans les issues #40, #41, #43 à #46 et #48.
-- Vérifier le déploiement réel de systemd et la réponse du point `/health` dans #47 et #49.
-- Vérifier les livrables exacts des diagrammes avant de modifier leurs statuts.
-- Ajouter les issues #40 à #49 au Project et renseigner Sprint, Priority, Status et Target date une fois un jeton disposant du droit `read:project`/Project est disponible.
+- Fournir les preuves de laboratoire pour les issues #40, #41, #43 à #46 et #48.
+- Confirmer le déploiement systemd et la réponse réelle de `/health` pour #47 et #49.
+- Confirmer la version finale des diagrammes encore `In Progress` avant de fermer leurs issues.
+- Vérifier les livrables documentaires encore `Todo` avant tout passage à `Done`.
 
-## Limite de synchronisation Project
+## État final
 
-L’authentification du dépôt est disponible, mais l’API GitHub Project a refusé l’accès faute de droit `read:project`. Les champs et vues du Project n’ont donc pas été modifiés dans cette synchronisation. Cette limitation ne concerne pas les issues du dépôt, qui ont été mises à jour avec succès.
+- 47 cartes au total.
+- 22 `Todo`.
+- 6 `In Progress`.
+- 19 `Done`.
+- 0 `blocked`.
+- 47 cartes avec statut.
+- 47 cartes avec sprint.
+- 47 cartes avec priorité.
+- 47 cartes avec date de début.
+- 47 cartes avec date de fin.
+- 47 cartes avec assignee.
+- Date la plus ancienne : `2026-04-15`.
+- Date la plus tardive : `2026-08-20`.
 
-## État final du dépôt
-
-- 49 issues au total.
-- 30 issues ouvertes.
-- 19 issues fermées.
-- Aucun pull request.
-- Les nouveaux travaux restants sont séparés en tâches atomiques et vérifiables.
-
+Le Project est désormais exploitable en vue tableau et en vue Kanban pour suivre les tâches, les priorités, les sprints et les dates du Gantt sans supprimer l’historique existant.
