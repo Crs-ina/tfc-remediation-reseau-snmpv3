@@ -133,7 +133,7 @@ class CalendarPolicy:
             return self._outside_supervised_period(local, "night")
 
         return ScheduleDecision(
-            mode="HUMAN_APPROVAL",
+            mode="SUPERVISED",
             reason="administrator_availability_window",
             local_datetime=local,
         )
@@ -146,7 +146,7 @@ class CalendarPolicy:
     ) -> ScheduleDecision:
         if not self.schedule.automatic_enabled:
             return ScheduleDecision(
-                mode="HUMAN_APPROVAL",
+                mode="SUPERVISED",
                 reason=f"automatic_remediation_disabled:{reason}",
                 local_datetime=local,
                 holiday_name=holiday_name,

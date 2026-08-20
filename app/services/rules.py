@@ -124,7 +124,7 @@ class RuleEngine:
             )
 
         # REACTIVATE_PORT is always supervised. SHUTDOWN_PORT and
-        # QUARANTINE_VLAN may only use the pre-authorized AUTOMATIC window.
+        # QUARANTINE_VLAN may use an AUTOMATIC policy window.
         automatic_allowed = (
             context.schedule.mode == "AUTOMATIC"
             and playbook.allow_automatic_outside_business_hours
@@ -145,7 +145,7 @@ class RuleEngine:
                 playbook_id=playbook.playbook_id,
                 action=playbook.action,
                 state="WAITING_ADMIN_APPROVAL",
-                execution_mode="HUMAN_APPROVAL",
+                execution_mode="SUPERVISED",
                 reason="explicit_admin_approval_required",
             )
 
@@ -153,6 +153,6 @@ class RuleEngine:
             playbook_id=playbook.playbook_id,
             action=playbook.action,
             state="WAITING_ADMIN_APPROVAL",
-            execution_mode="HUMAN_APPROVAL",
+            execution_mode="SUPERVISED",
             reason="explicit_admin_approval_required",
         )

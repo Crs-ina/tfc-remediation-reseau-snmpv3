@@ -35,7 +35,7 @@ def evaluate(**overrides):
     return engine.evaluate(RuleContext(**values))
 
 
-def test_shutdown_is_pre_authorized_in_automatic_window():
+def test_shutdown_is_automatic_in_automatic_window():
     decision = evaluate()
     assert decision.state == "AUTOMATICALLY_AUTHORIZED"
     assert decision.execution_mode == "AUTOMATIC"
@@ -43,7 +43,7 @@ def test_shutdown_is_pre_authorized_in_automatic_window():
 
 
 def test_business_hours_wait_for_administrator():
-    decision = evaluate(schedule=schedule("HUMAN_APPROVAL", "business_hours"))
+    decision = evaluate(schedule=schedule("SUPERVISED", "business_hours"))
     assert decision.state == "WAITING_ADMIN_APPROVAL"
 
 
@@ -69,7 +69,7 @@ def test_reactivate_port_is_always_supervised():
     decision = evaluate(incident_type="interface_admin_down")
     assert decision.action == "REACTIVATE_PORT"
     assert decision.state == "WAITING_ADMIN_APPROVAL"
-    assert decision.execution_mode == "HUMAN_APPROVAL"
+    assert decision.execution_mode == "SUPERVISED"
 
 
 def test_physical_disconnection_never_changes_network():

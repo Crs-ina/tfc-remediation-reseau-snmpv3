@@ -77,8 +77,8 @@ post-action. Le passage d'un incident de jour vers la nuit ne transforme pas
 une demande en attente en approbation.
 
 Outside the supervised window, only `SHUTDOWN_PORT` and `QUARANTINE_VLAN`
-may be pre-authorized by the external calendar. `REACTIVATE_PORT` remains
-always supervised. Every write path still applies target confirmation,
+may receive the business mode `AUTOMATIC` from the external calendar.
+`REACTIVATE_PORT` remains always supervised. Every write path still applies target confirmation,
 whitelist, capability, snapshot, cooldown, per-port serialization, at most two
 SET attempts and GET verification.
 

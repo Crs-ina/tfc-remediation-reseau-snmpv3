@@ -229,8 +229,22 @@ SNMP writes              : BLOCKED BY DRY-RUN
 L   Logout / Exit
 ```
 
-L'historique et l'audit affichent `Administrator : <system_username>` pour une
-action humaine et `Administrator : SYSTEM` pour le traitement automatique.
+L'historique et l'audit affichent `Approved by : <system_username>` pour une
+action supervisée et `Executed by : SYSTEM` pour le traitement automatique.
+
+## Correctifs des modes, de l’identité et des rollbacks
+
+La première modification fonctionnelle est maintenant documentée en détail
+dans [REMEDIATION_ROLLBACK_CHANGES.md](REMEDIATION_ROLLBACK_CHANGES.md). Elle
+couvre les deux seuls modes exposés (`SUPERVISED` et `AUTOMATIC`), l’identité
+humaine obligatoire pour une action supervisée, les snapshots avant/après, le
+rollback VLAN dynamique sans valeur 20 codée en dur, les états `UP`/`DOWN`, le
+blocage en cas de modification externe, l’ordre LIFO par cible et la séparation
+entre l’historique complet et `Available Rollbacks`.
+
+La migration `0005_applied_state` est requise pour ajouter les états réellement
+appliqués. Les lignes historiques sans ces snapshots restent consultables mais
+ne sont pas proposées comme rollbackables.
 
 ## Résultats des tests
 
@@ -240,7 +254,8 @@ Commande exécutée :
 pytest -q -p no:cacheprovider
 ```
 
-Résultat final : **111 passed, 3 skipped**.
+Résultat final après les correctifs fonctionnels et le splash :
+**125 passed, 3 skipped**.
 
 Les trois tests ignorés sont les tests d'intégration EVE-NG, désactivés par
 défaut. Aucun test matériel réel n'a été prétendu ni exécuté dans cette

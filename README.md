@@ -24,13 +24,15 @@ password exchange remains outside the Python process.
 The final English menu exposes Pending incidents, All incidents, Incident
 details, Approve remediation, Reject remediation, Remediation history, Audit
 logs, Rollback, Dry-run mode, System status and Logout / Exit. Human decisions
-are linked to `administrator_id`; system events display
-`Administrator : SYSTEM`.
+are linked to `administrator_id`. A supervised remediation displays
+`Approved by : <linux account>`; a genuinely automatic execution displays
+`Executed by : SYSTEM`.
 
-The startup identity is responsive and genuinely randomized across multiple
-Okapi poses, title styles, layouts, ANSI palettes, decorations and short boot
-sequences. It is emitted only on an interactive terminal, so redirected output
-and automation streams remain clean. Useful launch options are:
+The startup identity is responsive and randomized across fixed-geometry OKAPI
+pixel skins, layouts, ANSI palettes, decorations and short animations. It does
+not render an animal. It is emitted only on an interactive terminal, so
+redirected output and automation streams remain clean. Useful launch options
+are:
 
 ```bash
 okapi --fast
@@ -49,9 +51,13 @@ python -m app.cli.ui.preview --preview --width 72 --no-color --ascii
 okapi preview-splash --width 100
 ```
 
-The implementation is split between `app/cli/ui/ascii_art.py`, `colors.py`,
-`animations.py` and `splash.py`. See `docs/OKAPI_SPLASH_SCREEN.md` for the
-visual catalogue and extension guide.
+The implementation is split between `app/cli/ui/pixel_art.py`, `colors.py`,
+`animations.py` and `splash.py`. See `docs/OKAPI_PIXEL_SPLASH.md` for the
+active visual specification.
+
+The authorization, identity, history and rollback corrections are documented
+in `docs/REMEDIATION_ROLLBACK_CHANGES.md`, including the database migration,
+VLAN 10/8 examples, external-state protection and acceptance tests.
 
 Advanced maintenance commands remain available separately. Incident and audit
 searches support `--from "YYYY-MM-DD HH:MM"` and `--to "YYYY-MM-DD HH:MM"`,
@@ -91,7 +97,7 @@ refuse même si une configuration de capacité était modifiée par erreur.
 - Aucune communauté SNMPv1/SNMPv2c n’est acceptée.
 - De 08:00 à 17:00 (`Africa/Kinshasa`), toute action disruptive attend une
   décision humaine. Hors plage, seuls `SHUTDOWN_PORT` et `QUARANTINE_VLAN`
-  peuvent être préautorisés par le calendrier ; `REACTIVATE_PORT` reste
+  peuvent être exécutés en mode `AUTOMATIC` selon la politique ; `REACTIVATE_PORT` reste
   toujours supervisé et une attente existante ne se convertit jamais.
 - `SNMP_WRITE_ENABLED=false` par défaut.
 - Le modèle, l’objet et les protocoles doivent correspondre exactement au
@@ -112,8 +118,9 @@ refuse même si une configuration de capacité était modifiée par erreur.
   `data/runtime-settings.json`; un fichier invalide force le dry-run à ON.
 - L'approbation d'une action disruptive réelle, tout rollback et toute
   modification du dry-run exigent une réauthentification Linux/PAM.
-- Le rollback n’est jamais automatique : un administrateur doit le demander,
-  puis un SET remet le `previous_pvid` et un GET le vérifie.
+- Le rollback n’est jamais automatique : un administrateur doit le demander.
+  L’état courant est relu et doit correspondre à l’état appliqué par OKAPI ;
+  seulement ensuite un SET restaure le snapshot précédent et un GET le vérifie.
 - Les clés d’authentification et de confidentialité sont masquées dans les
   représentations de configuration et expurgées des détails d’audit.
 
@@ -155,7 +162,8 @@ Le résultat est persisté sans modifier le MLD :
 - `SwitchPort.port_name` contient `ifDescr` ;
 - `SwitchPort.vlan_id` contient le PVID observé ;
 - `NetworkHost` mémorise la MAC et son port ;
-- `Remediation.previous_vlan_id` sauvegarde le PVID pré-action.
+- `Remediation.previous_vlan_id` sauvegarde le PVID pré-action ;
+- `Remediation.applied_vlan_id` mémorise le PVID réellement confirmé après le SET.
 
 Lors d’un incident ultérieur concernant la même MAC, un GET ciblé de
 `dot1qTpFdbPort.<vlan_connu>.<mac>` revalide d’abord le port mémorisé. S’il
@@ -227,9 +235,8 @@ d’écriture configuré :
 ```text
 OKAPI — SYSTEM STATUS
 
-Backend                  : RUNNING
-Database                 : OK
-Zabbix webhook           : READY
+Administrator            : exauceeadm
+Zabbix integration       : READY
 SNMPv3                   : READY
 SNMP writes              : BLOCKED BY DRY-RUN
 Dry-run mode             : ON

@@ -1,8 +1,7 @@
-"""Terminal-safe Okapi mascots and OKAPI title art.
+"""Legacy asset names kept for import compatibility.
 
-The animal drawings deliberately use oversized ears, a narrow giraffid head,
-a sloping neck and horizontal hindquarter stripes.  They remain readable when
-all ANSI colour is removed.
+The active catalogue is rebound to fixed-geometry logos at the end of this
+module. New code should import :mod:`app.cli.ui.pixel_art` directly.
 """
 from __future__ import annotations
 
@@ -297,3 +296,38 @@ def titles_for_width(width: int, *, unicode: bool) -> tuple[AsciiAsset, ...]:
         if title.width <= width and (unicode or not title.unicode)
     )
     return candidates or (TITLE_MINIMAL,)
+
+
+# The active catalogue is the fixed-geometry pixel system. These assignments
+# preserve historical import names without exposing or rendering silhouettes.
+from . import pixel_art as _pixel_art
+
+AsciiAsset = _pixel_art.AsciiAsset
+LOGO_DESIGNS = _pixel_art.LOGO_DESIGNS
+PIXEL_STYLES = _pixel_art.PIXEL_STYLES
+LOGO_MASK = _pixel_art.LOGO_MASK
+LOGO_WIDTH = _pixel_art.LOGO_WIDTH
+LOGO_HEIGHT = _pixel_art.LOGO_HEIGHT
+render_pixel_logo = _pixel_art.render_pixel_logo
+OKAPI_TITLES = _pixel_art.OKAPI_TITLES
+OKAPI_ARTS = _pixel_art.OKAPI_ARTS
+OKAPI_LARGE = _pixel_art.OKAPI_LARGE
+OKAPI_MEDIUM = _pixel_art.OKAPI_MEDIUM
+OKAPI_SMALL = _pixel_art.OKAPI_SMALL
+OKAPI_PROFILE_LARGE = OKAPI_TITLES[0]
+OKAPI_LOOKBACK_LARGE = OKAPI_TITLES[1]
+OKAPI_PROFILE_MEDIUM = OKAPI_TITLES[2]
+OKAPI_SENTINEL_MEDIUM = OKAPI_TITLES[3]
+OKAPI_PROFILE_SMALL = OKAPI_TITLES[4]
+OKAPI_FACE_SMALL = OKAPI_TITLES[0]
+OKAPI_TINY = OKAPI_TITLES[1]
+TITLE_BLOCK, TITLE_HASH, TITLE_LINE, TITLE_DIGITAL, TITLE_SYMBOL = OKAPI_TITLES
+TITLE_MINIMAL = AsciiAsset("minimal", "OKAPI")
+titles_for_width = _pixel_art.titles_for_width
+
+
+def animals_for_width(width: int) -> tuple[AsciiAsset, ...]:
+    """Compatibility alias returning logo skins only."""
+
+    del width
+    return OKAPI_TITLES

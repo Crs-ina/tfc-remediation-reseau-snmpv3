@@ -11,7 +11,7 @@ from config import env_bool
 
 class SupervisedPolicy:
     def decide(self):
-        return SimpleNamespace(mode="HUMAN_APPROVAL")
+        return SimpleNamespace(mode="SUPERVISED")
 
 
 def _status_values(output: str) -> dict[str, str]:
@@ -45,14 +45,15 @@ def test_system_status_shows_dry_run_override(app, monkeypatch, capsys) -> None:
     )
 
     with app.app_context():
-        _system_status()
+        _system_status(Administrator(system_username="alice"))
 
     output = capsys.readouterr().out
     values = _status_values(output)
     assert "OKAPI — SYSTEM STATUS" in output
-    assert values["Backend"] == "RUNNING"
-    assert values["Database"] == "OK"
-    assert values["Zabbix webhook"] == "READY"
+    assert "Backend" not in values
+    assert "Database" not in values
+    assert values["Administrator"] == "alice"
+    assert values["Zabbix integration"] == "READY"
     assert values["SNMP writes"] == "BLOCKED BY DRY-RUN"
     assert values["Dry-run mode"] == "ON"
     assert values["Authorization mode"] == "SUPERVISED"
@@ -70,7 +71,7 @@ def test_system_status_enables_writes_only_when_dry_run_is_off(
     )
 
     with app.app_context():
-        _system_status()
+        _system_status(Administrator(system_username="alice"))
 
     values = _status_values(capsys.readouterr().out)
     assert values["SNMP writes"] == "ENABLED"

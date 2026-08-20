@@ -96,17 +96,4 @@ def paint(text: str, colour: str, enabled: bool) -> str:
     return f"{colour}{text}{RESET}"
 
 
-def colorize_animal(text: str, palette: Palette, enabled: bool) -> str:
-    """Colour body and stripe runs while preserving the monochrome silhouette."""
-
-    if not enabled:
-        return text
-    coloured: list[str] = []
-    stripe_re = re.compile(r"([=]{1,}|(?<!\w)#{2,})")
-    for line in text.splitlines():
-        body_line = stripe_re.sub(
-            lambda match: f"{palette.stripe}{match.group(0)}{palette.body}",
-            line,
-        )
-        coloured.append(f"{palette.body}{body_line}{RESET}")
-    return "\n".join(coloured)
+__all__ = ("ANSI_RE", "PALETTES", "RESET", "Palette", "paint", "strip_ansi", "supports_ansi", "supports_unicode")

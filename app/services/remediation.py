@@ -330,6 +330,12 @@ def _current_or_new_remediation(
         remediation.port_index = switch_port.port_index
         remediation.action_type = action_type
         remediation.authorization_mode = authorization_mode
+        # A repeated read-only preparation refreshes the snapshot before any
+        # write. Never keep an older inventory value as rollback state.
+        remediation.previous_port_status = switch_port.status
+        remediation.previous_vlan_id = switch_port.vlan_id
+        remediation.applied_port_status = None
+        remediation.applied_vlan_id = None
         return remediation
     remediation = Remediation(
         incident=incident,
@@ -342,6 +348,8 @@ def _current_or_new_remediation(
         status="PROPOSED",
         previous_port_status=switch_port.status,
         previous_vlan_id=switch_port.vlan_id,
+        applied_port_status=None,
+        applied_vlan_id=None,
     )
     db.session.add(remediation)
     return remediation

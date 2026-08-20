@@ -42,9 +42,14 @@ disabling dry-run invoke `sudo -k` followed by `sudo -v`. The password exchange
 is performed by the system PAM stack directly in the terminal and is never
 read by OKAPI. Failure is audited and the action is refused.
 
-Audit and remediation history distinguish `Administrator : <username>` from
-`Administrator : SYSTEM`. Dry-run changes persist in the ignored local runtime
+Audit and remediation history display `Approved by : <username>` for
+supervised actions and `Executed by : SYSTEM` for automatic actions. Dry-run
+changes persist in the ignored local runtime
 settings file and System status always displays the effective ON/OFF value.
+
+The complete specification for authorization modes, executor identity,
+dynamic VLAN/interface rollback, Available Rollbacks filtering and audit
+events is in [REMEDIATION_ROLLBACK_CHANGES.md](REMEDIATION_ROLLBACK_CHANGES.md).
 
 For maintenance, `flask --app run.py incidents list --from "2026-01-08 16:00"
 --to "2026-01-08 17:00"` and `incidents logs` support local-time filters.

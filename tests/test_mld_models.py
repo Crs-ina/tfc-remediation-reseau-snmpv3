@@ -61,6 +61,8 @@ def test_mld_column_sets_are_exact(app):
             "status",
             "previous_port_status",
             "previous_vlan_id",
+            "applied_port_status",
+            "applied_vlan_id",
         },
         "audit_logs": {
             "log_id",

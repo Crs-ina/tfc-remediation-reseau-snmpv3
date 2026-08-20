@@ -1,4 +1,8 @@
-# OKAPI — Splash screen professionnel
+# OKAPI — Splash screen professionnel (archive de la version mascotte)
+
+> Ce document décrit l’ancienne version et n’est plus la spécification active.
+> Le splash courant ne rend plus aucun animal. Voir
+> [OKAPI_PIXEL_SPLASH.md](OKAPI_PIXEL_SPLASH.md) pour le comportement livré.
 
 ## Résultat livré
 

@@ -29,7 +29,7 @@ from app.services.runtime_settings import (
     change_dry_run_mode,
     is_dry_run_enabled,
 )
-from app.services.snmp_execution import rollback_snmp_action
+from app.services.snmp_execution import available_rollbacks, rollback_snmp_action
 
 from .ui.colors import PALETTES
 from .ui.splash import preview_all, show_splash
@@ -254,26 +254,20 @@ def _reject(administrator: Administrator, incident: Incident) -> None:
 def _remediation_history() -> None:
     items = list(
         db.session.execute(
-            db.select(Remediation).order_by(Remediation.start_time.desc()).limit(20)
+            db.select(Remediation).order_by(Remediation.start_time.desc())
         ).scalars()
     )
     if not items:
         click.echo("No remediation history.")
         return
+    click.echo("OKAPI - REMEDIATION HISTORY")
     for item in items:
-        decision = db.session.execute(
-            db.select(AuditLog)
-            .where(
-                AuditLog.remediation_id == item.remediation_id,
-                AuditLog.event_type.in_(
-                    ["REMEDIATION_APPROVED", "REMEDIATION_REFUSED", "ROLLBACK_REQUESTED"]
-                ),
-            )
-            .order_by(AuditLog.event_timestamp.desc())
-        ).scalars().first()
         click.echo(
-            f"{local_time(item.start_time)} | {item.action_type} | "
-            f"{item.authorization_mode} | {item.status} | {_actor_label(decision)}"
+            f"\n{local_time(item.start_time)}\n"
+            f"Action      : {item.action_type}\n"
+            f"Mode        : {item.authorization_mode}\n"
+            f"{_remediation_actor_label(item)}\n"
+            f"Result      : {item.status}"
         )
 
 
@@ -322,28 +316,67 @@ def _logs() -> None:
 
 
 def _actor_label(entry: AuditLog | None) -> str:
-    username = entry.administrator.system_username if entry and entry.administrator else "SYSTEM"
-    return f"Administrator : {username}"
+    if entry is None or entry.administrator is None:
+        return "Executed by : SYSTEM"
+    username = entry.administrator.system_username
+    if entry.event_type == "REMEDIATION_APPROVED":
+        return f"Approved by : {username}"
+    if entry.event_type == "REMEDIATION_REFUSED":
+        return f"Rejected by : {username}"
+    if "ROLLBACK" in entry.event_type:
+        return f"Requested by : {username}"
+    if entry.remediation and entry.remediation.authorization_mode == "SUPERVISED":
+        return f"Approved by : {username}"
+    return f"Performed by : {username}"
+
+
+def _remediation_actor_label(remediation: Remediation) -> str:
+    if remediation.authorization_mode == "AUTOMATIC":
+        return "Executed by : SYSTEM"
+    event_type = (
+        "REMEDIATION_REFUSED"
+        if remediation.status == "REJECTED_BY_ADMIN"
+        else "REMEDIATION_APPROVED"
+    )
+    entry = db.session.execute(
+        db.select(AuditLog)
+        .where(
+            AuditLog.remediation_id == remediation.remediation_id,
+            AuditLog.event_type == event_type,
+            AuditLog.administrator_id.is_not(None),
+        )
+        .order_by(AuditLog.event_timestamp.desc())
+    ).scalars().first()
+    if entry is None or entry.administrator is None:
+        label = "Rejected by" if event_type == "REMEDIATION_REFUSED" else "Approved by"
+        return f"{label} : NOT RECORDED"
+    label = "Rejected by" if event_type == "REMEDIATION_REFUSED" else "Approved by"
+    return f"{label} : {entry.administrator.system_username}"
 
 
 def _rollback(administrator: Administrator) -> None:
-    items = list(
-        db.session.execute(
-            db.select(Remediation)
-            .where(Remediation.status == "SUCCEEDED")
-            .order_by(Remediation.start_time.desc())
-        ).scalars()
-    )
+    items = available_rollbacks()
     if not items:
         click.echo("Rollback unavailable. No successful remediation is available.")
         return
+    click.echo("OKAPI - AVAILABLE ROLLBACKS")
     for number, remediation in enumerate(items, 1):
-        snapshot = (
-            f"previous VLAN {remediation.previous_vlan_id}"
+        target = _rollback_target(remediation)
+        state = (
+            f"Current VLAN    : {remediation.applied_vlan_id}\n"
+            f"    Restore VLAN    : {remediation.previous_vlan_id}"
             if remediation.action_type == "QUARANTINE_VLAN"
-            else f"previous admin status {remediation.previous_port_status}"
+            else f"Current state   : {_admin_status_label(remediation.applied_port_status)}\n"
+            f"    Restore to      : {_admin_status_label(remediation.previous_port_status)}"
         )
-        click.echo(f"[{number}] {remediation.action_type} | {snapshot}")
+        click.echo(
+            f"\n[{number}] {local_time(remediation.start_time)}\n"
+            f"    Target          : {target}\n"
+            f"    Action          : {remediation.action_type}\n"
+            f"    {state}\n"
+            f"    Mode            : {remediation.authorization_mode}\n"
+            f"    {_remediation_actor_label(remediation)}"
+        )
     selected = click.prompt("Select remediation (or B to go back)", default="B").strip()
     if selected.upper() == "B":
         return
@@ -351,7 +384,7 @@ def _rollback(administrator: Administrator) -> None:
         remediation = items[int(selected) - 1]
         reauthenticate_for_critical_action(administrator, "ROLLBACK")
         observed = rollback_snmp_action(
-            remediation.incident,
+            remediation,
             administrator_id=administrator.administrator_id,
         )
         if is_dry_run_enabled():
@@ -368,6 +401,33 @@ def _rollback(administrator: Administrator) -> None:
         RemediationError,
     ) as exc:
         click.echo(f"Rollback unavailable: {exc}")
+
+
+def _rollback_target(remediation: Remediation) -> str:
+    switch_port = remediation.switch_port
+    host = remediation.target_host
+    host_label = (
+        host.ip_address
+        if host and host.ip_address
+        else host.mac_address
+        if host
+        else switch_port.network_switch.name
+        if switch_port
+        else "Unknown target"
+    )
+    port_label = switch_port.port_name if switch_port and switch_port.port_name else remediation.port_index
+    return f"{host_label} / {port_label}"
+
+
+def _admin_status_label(value: str | None) -> str:
+    if value is None:
+        return "UNKNOWN"
+    normalized = value.strip().lower()
+    if normalized in {"1", "up", "up(1)"}:
+        return "UP"
+    if normalized in {"2", "down", "down(2)"}:
+        return "DOWN"
+    return "UNKNOWN"
 
 
 def _dry_run_menu(administrator: Administrator) -> None:
@@ -391,31 +451,24 @@ def _dry_run_menu(administrator: Administrator) -> None:
     click.echo(f"Dry-run mode is now {'ON' if requested else 'OFF'}.")
 
 
-def _system_status() -> None:
+def _system_status(administrator: Administrator) -> None:
     registry = current_app.extensions.get("snmp_mib_registry")
     mib_ready = bool(registry and registry.status.ready)
-    try:
-        db.session.execute(db.select(Administrator.administrator_id).limit(1)).first()
-        sqlite_ready = True
-    except Exception:
-        sqlite_ready = False
     schedule = CalendarPolicy.from_file(
         current_app.config["AUTOMATION_SCHEDULE_PATH"]
     ).decide()
-    authorization_mode = "SUPERVISED" if schedule.mode == "HUMAN_APPROVAL" else schedule.mode
     webhook_ready = bool(
         current_app.config["WEBHOOK_TOKEN"]
         and current_app.config["WEBHOOK_ALLOWED_SOURCE_IPS"]
     )
     dry_run = is_dry_run_enabled()
     values = (
-        ("Backend", "RUNNING"),
-        ("Database", "OK" if sqlite_ready else "ERROR"),
-        ("Zabbix webhook", "READY" if webhook_ready else "NOT READY"),
+        ("Administrator", administrator.system_username),
+        ("Zabbix integration", "READY" if webhook_ready else "NOT READY"),
         ("SNMPv3", "READY" if mib_ready else "NOT READY"),
         ("SNMP writes", _snmp_write_state()),
         ("Dry-run mode", "ON" if dry_run else "OFF"),
-        ("Authorization mode", authorization_mode),
+        ("Authorization mode", schedule.mode),
         ("Quarantine VLAN", str(current_app.config["QUARANTINE_VLAN_ID"])),
         ("Remediation cooldown", f"{current_app.config['REMEDIATION_COOLDOWN_SECONDS']} s"),
     )
@@ -449,11 +502,7 @@ def _attention_summary() -> None:
             )
         ).scalar_one()
         click.echo(f"{label:<21}: {count}")
-    rollback_count = db.session.execute(
-        db.select(db.func.count(Remediation.remediation_id)).where(
-            Remediation.status == "SUCCEEDED"
-        )
-    ).scalar_one()
+    rollback_count = len(available_rollbacks())
     click.echo(f"{'Rollback available':<21}: {rollback_count}")
 
 
@@ -541,7 +590,7 @@ def okapi(
         elif choice == "9":
             _dry_run_menu(administrator)
         elif choice == "10":
-            _system_status()
+            _system_status(administrator)
         else:
             click.echo("Invalid selection.")
 

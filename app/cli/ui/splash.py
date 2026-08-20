@@ -5,21 +5,20 @@ import argparse
 import random
 import shutil
 import sys
-import textwrap
 import unicodedata
 from dataclasses import dataclass
 from typing import TextIO
 
-from .animations import animate_boot_sequence
-from .ascii_art import (
-    OKAPI_ARTS,
-    OKAPI_MEDIUM,
-    OKAPI_SMALL,
-    AsciiAsset,
-    animals_for_width,
-    titles_for_width,
+from .animations import SHOW_CURSOR, animate_boot_sequence, animate_logo
+from .pixel_art import (
+    LOGO_DESIGNS,
+    LOGO_HEIGHT,
+    LOGO_MASK,
+    LOGO_WIDTH,
+    PIXEL_STYLES,
+    render_pixel_logo,
 )
-from .colors import PALETTES, RESET, Palette, colorize_animal, paint, strip_ansi, supports_ansi, supports_unicode
+from .colors import PALETTES, RESET, Palette, paint, strip_ansi, supports_ansi, supports_unicode
 
 
 SPLASH_CONFIG = {
@@ -46,8 +45,8 @@ STARTUP_MESSAGES = (
 ASCII_DECORATIONS = ("*", "+", ".", "o")
 UNICODE_DECORATIONS = ("*", "+", ".", "✦", "✧", "⋆", "·", "°")
 LAYOUTS = (
-    "mascot-first",
-    "title-first",
+    "logo-first",
+    "signature-first",
     "side-by-side",
     "frame",
     "telemetry",
@@ -55,28 +54,35 @@ LAYOUTS = (
     "minimal",
     "command-line",
 )
-ANIMATION_STYLES = ("dots", "progress", "steps")
+ANIMATION_STYLES = (
+    "left_to_right",
+    "pixel_reveal",
+    "scan_line",
+    "letter_by_letter",
+    "glitch_assembly",
+    "shadow_build",
+)
 
 
 @dataclass(frozen=True)
 class PreviewVariant:
     layout: str
     palette: str
-    animal_index: int
-    title_index: int
+    design_index: int
+    pixel_style_index: int
     subtitle_index: int
     animation: str
 
 
 PREVIEW_VARIANTS = (
-    PreviewVariant("mascot-first", "okapi", 0, 0, 0, "steps"),
-    PreviewVariant("title-first", "network", 1, 1, 1, "progress"),
-    PreviewVariant("side-by-side", "forest", 2, 4, 2, "dots"),
-    PreviewVariant("frame", "terminal", 3, 2, 3, "steps"),
-    PreviewVariant("telemetry", "cyber", 4, 3, 1, "progress"),
-    PreviewVariant("constellation", "mono", 5, 1, 2, "dots"),
-    PreviewVariant("minimal", "okapi", 6, 5, 0, "steps"),
-    PreviewVariant("command-line", "network", 2, 2, 3, "progress"),
+    PreviewVariant("logo-first", "okapi", 0, 0, 0, "left_to_right"),
+    PreviewVariant("signature-first", "network", 1, 1, 1, "pixel_reveal"),
+    PreviewVariant("side-by-side", "forest", 2, 2, 2, "scan_line"),
+    PreviewVariant("frame", "terminal", 3, 3, 3, "letter_by_letter"),
+    PreviewVariant("telemetry", "cyber", 4, 4, 1, "glitch_assembly"),
+    PreviewVariant("constellation", "mono", 0, 5, 2, "shadow_build"),
+    PreviewVariant("minimal", "okapi", 1, 2, 0, "pixel_reveal"),
+    PreviewVariant("command-line", "network", 2, 4, 3, "scan_line"),
 )
 
 
@@ -88,6 +94,9 @@ class SplashFrame:
     colour: bool
     unicode: bool
     variant_name: str
+    design_name: str
+    pixel_style: str
+    logo_cells: tuple[tuple[int, int], ...]
 
 
 def visible_width(text: str) -> int:
@@ -173,47 +182,36 @@ def _side_by_side(left: str, right: str, width: int) -> list[str] | None:
     return combined
 
 
-def _select_assets(
+def _select_logo(
     *,
     width: int,
-    layout: str,
     unicode: bool,
+    randomize: bool,
     rng: random.Random,
     forced: PreviewVariant | None,
-    side_text_width: int,
-) -> tuple[AsciiAsset, AsciiAsset]:
-    title_candidates = titles_for_width(max(1, width - (4 if layout == "frame" else 0)), unicode=unicode)
-    if forced:
-        title = title_candidates[forced.title_index % len(title_candidates)]
-    else:
-        title = rng.choice(title_candidates)
+) -> tuple[str, str, str]:
+    """Select design and pixel skin once, then render one stable geometry."""
 
-    right_width = max(title.width, side_text_width, len("[ OKAPI ]"))
-    available = width - right_width - 4 if layout == "side-by-side" else width - (4 if layout == "frame" else 0)
-    desired = OKAPI_ARTS[forced.animal_index % len(OKAPI_ARTS)] if forced else None
-    if desired is not None and desired.width <= available:
-        return desired, title
-
-    if layout == "side-by-side":
-        candidates = tuple(asset for asset in OKAPI_MEDIUM + OKAPI_SMALL if asset.width <= available)
-    elif layout == "minimal":
-        candidates = tuple(asset for asset in OKAPI_SMALL if asset.width <= width)
-    else:
-        candidates = tuple(asset for asset in animals_for_width(width) if asset.width <= width - (4 if layout == "frame" else 0))
-    if not candidates:
-        candidates = tuple(asset for asset in OKAPI_ARTS if asset.width <= width)
-    if not candidates:
-        candidates = (OKAPI_SMALL[-1],)
-    animal = candidates[forced.animal_index % len(candidates)] if forced else rng.choice(candidates)
-    return animal, title
+    design = (
+        LOGO_DESIGNS[forced.design_index % len(LOGO_DESIGNS)]
+        if forced
+        else rng.choice(LOGO_DESIGNS) if randomize else LOGO_DESIGNS[0]
+    )
+    pixel_style = (
+        PIXEL_STYLES[forced.pixel_style_index % len(PIXEL_STYLES)]
+        if forced
+        else rng.choice(PIXEL_STYLES) if randomize else PIXEL_STYLES[0]
+    )
+    if width < LOGO_WIDTH:
+        return "OKAPI", design, pixel_style
+    return render_pixel_logo(design, pixel_style, unicode=unicode), design, pixel_style
 
 
 def _compose(
     *,
     width: int,
     layout: str,
-    animal: str,
-    title: str,
+    logo: str,
     signature: str,
     subtitle: str,
     startup_message: str,
@@ -225,28 +223,26 @@ def _compose(
     accent_subtitle = paint(subtitle, palette.accent, colour)
     muted_startup = paint(startup_message, palette.muted, colour)
     coloured_signature = paint(signature, palette.title, colour)
-    centred_animal = _center_block(animal, width)
-    centred_title = _center_block(title, width)
+    centred_logo = _center_block(logo, width)
     centred_signature = _center_block(coloured_signature, width)
     centred_subtitle = _center_block(accent_subtitle, width)
     centred_startup = _center_block(muted_startup, width)
 
-    if layout == "title-first":
-        lines = _stack(centred_title, centred_signature, centred_animal, centred_subtitle, centred_startup)
+    if layout == "signature-first":
+        lines = _stack(centred_signature, centred_logo, centred_subtitle, centred_startup)
     elif layout == "side-by-side":
-        right = "\n".join((title, "", coloured_signature, accent_subtitle))
-        side = _side_by_side(animal, right, width)
+        right = "\n".join((coloured_signature, "", accent_subtitle))
+        side = _side_by_side(logo, right, width)
         if side is not None:
             lines = _center_block("\n".join(side), width).splitlines()
         else:
-            lines = _stack(centred_animal, centred_title, centred_signature, centred_subtitle)
+            lines = _stack(centred_logo, centred_signature, centred_subtitle)
         lines.extend(("", centred_startup))
     elif layout == "frame":
-        content = _stack(animal, title, coloured_signature, accent_subtitle)
+        content = _stack(logo, coloured_signature, accent_subtitle)
         inner = min(width - 4, max((visible_width(line) for line in content), default=1))
         content = _stack(
-            _center_block(animal, inner),
-            _center_block(title, inner),
+            _center_block(logo, inner),
             _center_block(coloured_signature, inner),
             _center_block(accent_subtitle, inner),
         )
@@ -266,23 +262,49 @@ def _compose(
         )
         footer = paint(footer_text, palette.muted, colour)
         lines = _stack(
-            _center_block(header, width), centred_title, centred_animal,
+            _center_block(header, width), centred_logo,
             centred_subtitle, _center_block(footer, width), centred_startup,
         )
     elif layout == "constellation":
-        lines = _stack(decoration_top, centred_animal, centred_title, centred_signature, centred_subtitle, decoration_bottom, centred_startup)
+        lines = _stack(decoration_top, centred_logo, centred_signature, centred_subtitle, decoration_bottom, centred_startup)
     elif layout == "minimal":
-        lines = _stack(decoration_top, centred_animal, centred_signature, centred_subtitle, centred_startup)
+        lines = _stack(centred_logo, centred_signature, centred_subtitle, centred_startup)
     elif layout == "command-line":
         prompt = paint("$ okapi --initialize --secure", palette.accent, colour)
         pipeline = paint("observe > detect > validate > remediate", palette.muted, colour)
         lines = _stack(
-            _center_block(prompt, width), centred_title, centred_animal,
+            _center_block(prompt, width), centred_logo,
             centred_signature, _center_block(pipeline, width), centred_startup,
         )
     else:
-        lines = _stack(decoration_top, centred_animal, centred_title, centred_signature, centred_subtitle, centred_startup)
+        lines = _stack(decoration_top, centred_logo, centred_signature, centred_subtitle, centred_startup)
     return lines
+
+
+def _find_logo_cells(lines: list[str], logo_text: str) -> tuple[tuple[int, int], ...]:
+    """Locate fixed logo pixels inside the final composition for animation."""
+
+    cells: list[tuple[int, int]] = []
+    search_from = 0
+    logo_lines = logo_text.splitlines()
+    masks = LOGO_MASK if len(logo_lines) == LOGO_HEIGHT else (tuple(True for _ in "OKAPI"),)
+    for logo_line, mask in zip(logo_lines, masks, strict=True):
+        leading = len(logo_line) - len(logo_line.lstrip())
+        needle = logo_line.strip()
+        for row in range(search_from, len(lines)):
+            plain_line = strip_ansi(lines[row])
+            found = plain_line.find(needle)
+            if found < 0:
+                continue
+            origin = found - leading
+            cells.extend(
+                (row, origin + column)
+                for column, filled in enumerate(mask)
+                if filled and 0 <= origin + column < len(plain_line)
+            )
+            search_from = row + 1
+            break
+    return tuple(cells)
 
 
 def build_splash(
@@ -318,21 +340,22 @@ def build_splash(
         layout = LAYOUTS[0]
         palette = PALETTES["okapi"]
         subtitle = SPLASH_CONFIG["subtitle"]
-        animation_style = "steps"
+        animation_style = "left_to_right"
+
+    if layout == "frame" and width < LOGO_WIDTH + 4:
+        layout = "minimal"
 
     if len(subtitle) > width:
         subtitle = "Network Remediation" if width >= 20 else "Network CLI"
 
-    animal_asset, title_asset = _select_assets(
+    logo_plain, design_name, pixel_style = _select_logo(
         width=width,
-        layout=layout,
         unicode=use_unicode,
+        randomize=randomize,
         rng=rng,
         forced=forced,
-        side_text_width=len(subtitle),
     )
-    animal = colorize_animal(textwrap.dedent(animal_asset.text), palette, use_colour)
-    title = paint(title_asset.text, palette.title, use_colour)
+    logo = paint(logo_plain, palette.title, use_colour)
     symbols = UNICODE_DECORATIONS if use_unicode else ASCII_DECORATIONS
     decoration_top = _decorate_row(width, symbols, rng) if decorations else ""
     decoration_bottom = _decorate_row(width, symbols, rng) if decorations else ""
@@ -344,8 +367,7 @@ def build_splash(
     raw_lines = _compose(
         width=width,
         layout=layout,
-        animal=animal,
-        title=title,
+        logo=logo,
         signature=signature,
         subtitle=subtitle,
         startup_message=startup_message,
@@ -359,6 +381,7 @@ def build_splash(
         fitted.pop(0)
     while fitted and not fitted[-1]:
         fitted.pop()
+    logo_cells = _find_logo_cells(fitted, logo_plain)
     return SplashFrame(
         text="\n".join(fitted),
         palette=palette,
@@ -366,6 +389,9 @@ def build_splash(
         colour=use_colour,
         unicode=use_unicode,
         variant_name=layout,
+        design_name=design_name,
+        pixel_style=pixel_style,
+        logo_cells=logo_cells,
     )
 
 
@@ -405,11 +431,25 @@ def show_splash(
         decorations=decorations,
         stream=stream,
     )
+    cursor_animation = animated and stream.isatty() and supports_ansi(stream)
     try:
-        stream.write(frame.text + "\n\n")
-        stream.flush()
+        if cursor_animation:
+            animate_logo(
+                frame.text,
+                frame.logo_cells,
+                style=frame.animation_style,
+                unicode=frame.unicode,
+                fast=fast,
+                palette=frame.palette,
+                colour=frame.colour,
+                stream=stream,
+            )
+            stream.write("\n")
+        else:
+            stream.write(frame.text + "\n\n")
+            stream.flush()
         animate_boot_sequence(
-            style=frame.animation_style,
+            style="steps",
             palette=frame.palette,
             colour=frame.colour,
             unicode=frame.unicode,
@@ -417,9 +457,11 @@ def show_splash(
             stream=stream,
         )
     finally:
+        if cursor_animation:
+            stream.write(SHOW_CURSOR)
         if frame.colour:
             stream.write(RESET)
-            stream.flush()
+        stream.flush()
     return True
 
 

@@ -15,11 +15,11 @@ def policy() -> CalendarPolicy:
     return CalendarPolicy.from_file(SCHEDULE)
 
 
-def test_business_hours_require_human_approval():
+def test_business_hours_use_supervised_mode():
     decision = policy().decide(
         datetime(2026, 8, 10, 10, 0, tzinfo=ZoneInfo("Africa/Kinshasa"))
     )
-    assert decision.mode == "HUMAN_APPROVAL"
+    assert decision.mode == "SUPERVISED"
 
 
 def test_night_allows_automatic_mode():

@@ -1,7 +1,7 @@
 """Backward-compatible imports for the modular OKAPI splash package."""
 from __future__ import annotations
 
-from .ui.ascii_art import (
+from .ui.pixel_art import (
     OKAPI_ARTS,
     OKAPI_LARGE,
     OKAPI_MEDIUM,

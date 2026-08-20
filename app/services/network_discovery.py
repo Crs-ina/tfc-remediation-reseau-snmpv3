@@ -67,9 +67,14 @@ def discover_switch(
             f"MIB registry is not ready: {registry.status.error}"
         )
 
-    effective_config = snmp_config or SnmpV3Config.from_env(
-        host=management_ip
-    )
+    try:
+        effective_config = snmp_config or SnmpV3Config.from_env(
+            host=management_ip
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise NetworkDiscoveryError(
+            f"Unable to initialize SNMPv3 discovery for {management_ip}: {exc}"
+        ) from exc
 
     read_client = client or SnmpReadClient(
         effective_config,

@@ -61,6 +61,8 @@ class Remediation(db.Model):
     status: Mapped[str] = mapped_column(String(64), nullable=False)
     previous_port_status: Mapped[str | None] = mapped_column(String(32))
     previous_vlan_id: Mapped[int | None] = mapped_column(Integer)
+    applied_port_status: Mapped[str | None] = mapped_column(String(32))
+    applied_vlan_id: Mapped[int | None] = mapped_column(Integer)
 
     incident: Mapped["Incident"] = relationship(back_populates="remediations")
     target_host: Mapped["NetworkHost | None"] = relationship(
@@ -87,4 +89,6 @@ class Remediation(db.Model):
             "status": self.status,
             "previous_port_status": self.previous_port_status,
             "previous_vlan_id": self.previous_vlan_id,
+            "applied_port_status": self.applied_port_status,
+            "applied_vlan_id": self.applied_vlan_id,
         }

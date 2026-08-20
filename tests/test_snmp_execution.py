@@ -15,9 +15,12 @@ from app.services.remediation import (
 )
 from app.services.snmp_execution import (
     RemediationVerificationError,
+    RollbackStateChangedError,
+    available_rollbacks,
     execute_interface_admin_action,
     execute_quarantine_vlan,
     execute_snmp_action,
+    rollback_interface_admin_action,
     rollback_quarantine_vlan,
 )
 from app.snmp.client import SnmpV3Config
@@ -318,7 +321,7 @@ def test_explicit_rollback_restores_saved_previous_pvid(app):
             client=FakeWriteClient([10, 18]),
             snmp_config=snmp_config(),
         )
-        rollback_client = FakeWriteClient([10])
+        rollback_client = FakeWriteClient([18, 10])
 
         observed = rollback_quarantine_vlan(
             incident,
@@ -423,6 +426,7 @@ def test_dry_run_simulates_explicit_rollback_without_set(app):
     with app.app_context():
         incident, remediation, _port = build_waiting_remediation()
         remediation.status = "SUCCEEDED"
+        remediation.applied_vlan_id = 18
         incident.processing_status = "REMEDIATED"
         db.session.commit()
         fake = FakeWriteClient([])
@@ -498,3 +502,237 @@ def test_recent_remediation_on_same_port_enforces_cooldown(app):
 
         assert fake.set_calls == []
         assert fake.read_calls == []
+
+
+def test_vlan_8_is_restored_without_a_hardcoded_rollback_value(app):
+    enable_writes(app)
+    with app.app_context():
+        incident, remediation, port = build_waiting_remediation()
+        remediation.previous_vlan_id = 8
+        port.vlan_id = 8
+        db.session.commit()
+        approve(incident)
+
+        execute_quarantine_vlan(
+            incident,
+            client=FakeWriteClient([8, 18]),
+            snmp_config=snmp_config(),
+        )
+        rollback_client = FakeWriteClient([18, 8])
+        observed = rollback_quarantine_vlan(
+            remediation,
+            administrator_id="admin-test",
+            client=rollback_client,
+            snmp_config=snmp_config(),
+        )
+
+        assert observed == 8
+        assert rollback_client.set_calls[0][1:] == (8, True)
+        assert port.vlan_id == 8
+
+
+def test_rollback_is_blocked_when_vlan_changed_after_remediation(app):
+    enable_writes(app)
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        approve(incident)
+        execute_quarantine_vlan(
+            incident,
+            client=FakeWriteClient([10, 18]),
+            snmp_config=snmp_config(),
+        )
+        rollback_client = FakeWriteClient([20])
+
+        with pytest.raises(RollbackStateChangedError, match="Expected current VLAN : 18"):
+            rollback_quarantine_vlan(
+                remediation,
+                administrator_id="admin-test",
+                client=rollback_client,
+                snmp_config=snmp_config(),
+            )
+
+        assert rollback_client.set_calls == []
+        assert remediation.status == "ROLLBACK_BLOCKED"
+        audit = db.session.execute(
+            db.select(AuditLog).where(
+                AuditLog.event_type == "ROLLBACK_BLOCKED_STATE_CHANGED"
+            )
+        ).scalar_one()
+        assert audit.administrator.system_username == "admin-test"
+        assert '"observed_current": 20' in audit.message
+
+
+def test_shutdown_rollback_restores_up_and_uses_readable_snapshot(app, monkeypatch):
+    enable_writes(app)
+    monkeypatch.setattr(
+        "app.services.snmp_execution.require_lab_validated_write",
+        lambda *_args, **_kwargs: None,
+    )
+    with app.app_context():
+        incident, remediation, port = build_waiting_remediation()
+        remediation.action_type = "SHUTDOWN_PORT"
+        remediation.previous_port_status = "1"
+        db.session.commit()
+        approve(incident)
+
+        execute_interface_admin_action(
+            incident,
+            client=FakeWriteClient([200, 1, 2]),
+            snmp_config=snmp_config(),
+        )
+        assert remediation.applied_port_status == "DOWN"
+        assert port.status == "down"
+
+        rollback_client = FakeWriteClient([200, 2, 1])
+        observed = rollback_interface_admin_action(
+            remediation,
+            administrator_id="admin-test",
+            client=rollback_client,
+            snmp_config=snmp_config(),
+        )
+
+        assert observed == 1
+        assert rollback_client.set_calls[0][1:] == (1, True)
+        assert port.status == "up"
+
+
+def test_interface_rollback_is_blocked_after_an_external_state_change(
+    app, monkeypatch
+):
+    enable_writes(app)
+    monkeypatch.setattr(
+        "app.services.snmp_execution.require_lab_validated_write",
+        lambda *_args, **_kwargs: None,
+    )
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        remediation.action_type = "SHUTDOWN_PORT"
+        remediation.previous_port_status = "UP"
+        db.session.commit()
+        approve(incident)
+        execute_interface_admin_action(
+            incident,
+            client=FakeWriteClient([200, 1, 2]),
+            snmp_config=snmp_config(),
+        )
+        rollback_client = FakeWriteClient([200, 1])
+
+        with pytest.raises(
+            RollbackStateChangedError,
+            match="Expected current administrative state : DOWN",
+        ):
+            rollback_interface_admin_action(
+                remediation,
+                administrator_id="admin-test",
+                client=rollback_client,
+                snmp_config=snmp_config(),
+            )
+
+        assert rollback_client.set_calls == []
+        assert remediation.status == "ROLLBACK_BLOCKED"
+
+
+@pytest.mark.parametrize("username", ["exauceeadm", "claude"])
+def test_supervised_execution_uses_the_authenticated_approver(app, username):
+    enable_writes(app)
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        administrator = db.session.get(Administrator, "admin-test")
+        administrator.system_username = username
+        db.session.commit()
+        approve(incident)
+
+        execute_quarantine_vlan(
+            incident,
+            client=FakeWriteClient([10, 18]),
+            snmp_config=snmp_config(),
+        )
+
+        success = db.session.execute(
+            db.select(AuditLog).where(
+                AuditLog.remediation_id == remediation.remediation_id,
+                AuditLog.event_type == "SNMP_REMEDIATION_SUCCEEDED",
+            )
+        ).scalar_one()
+        assert remediation.authorization_mode == "SUPERVISED"
+        assert success.administrator.system_username == username
+
+
+def test_automatic_execution_is_attributed_to_system(app):
+    enable_writes(app)
+    with app.app_context():
+        incident, remediation, _port = build_waiting_remediation()
+        incident.processing_status = "AUTOMATICALLY_AUTHORIZED"
+        remediation.authorization_mode = "AUTOMATIC"
+        remediation.status = "AUTHORIZED_PENDING_EXECUTION"
+        db.session.commit()
+
+        execute_quarantine_vlan(
+            incident,
+            client=FakeWriteClient([10, 18]),
+            snmp_config=snmp_config(),
+        )
+
+        success = db.session.execute(
+            db.select(AuditLog).where(
+                AuditLog.remediation_id == remediation.remediation_id,
+                AuditLog.event_type == "SNMP_REMEDIATION_SUCCEEDED",
+            )
+        ).scalar_one()
+        assert success.administrator_id is None
+        assert success.to_dict()["administrator"] == "SYSTEM"
+
+
+def test_available_rollbacks_filter_history_and_enforce_target_lifo(app):
+    with app.app_context():
+        _incident, older, port = build_waiting_remediation()
+        older.status = "SUCCEEDED"
+        older.applied_vlan_id = 18
+        older.start_time = datetime(2026, 8, 20, 10, 0, tzinfo=timezone.utc)
+
+        newer_incident = Incident(
+            incident_type="network_loop",
+            zabbix_event_id="evt-newer-change",
+            processing_status="REMEDIATED",
+            playbook_id="PB-LOOP-001",
+        )
+        newer = Remediation(
+            incident=newer_incident,
+            switch_port=port,
+            switch_id=port.switch_id,
+            port_index=port.port_index,
+            action_type="SHUTDOWN_PORT",
+            authorization_mode="SUPERVISED",
+            status="SUCCEEDED",
+            previous_port_status="UP",
+            applied_port_status="DOWN",
+            start_time=datetime(2026, 8, 20, 10, 5, tzinfo=timezone.utc),
+        )
+        failed_incident = Incident(
+            incident_type="network_loop",
+            zabbix_event_id="evt-failed-change",
+            processing_status="REMEDIATION_FAILED",
+            playbook_id="PB-LOOP-001",
+        )
+        failed = Remediation(
+            incident=failed_incident,
+            switch_port=port,
+            switch_id=port.switch_id,
+            port_index=port.port_index,
+            action_type="SHUTDOWN_PORT",
+            authorization_mode="AUTOMATIC",
+            status="FAILED",
+            previous_port_status="UP",
+        )
+        db.session.add_all([newer_incident, newer, failed_incident, failed])
+        db.session.commit()
+
+        assert available_rollbacks() == [newer]
+
+        newer.status = "ROLLED_BACK"
+        db.session.commit()
+        assert available_rollbacks() == [older]
+
+        older.status = "ROLLED_BACK"
+        db.session.commit()
+        assert available_rollbacks() == []
