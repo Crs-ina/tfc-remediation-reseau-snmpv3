@@ -23,6 +23,7 @@ from app.services.remediation import (
     approve_incident,
     execute_authorized_remediation,
     refuse_incident,
+    resume_simulated_remediation_for_real,
 )
 from app.services.runtime_settings import (
     change_dry_run_mode,
@@ -192,14 +193,53 @@ def _decide(administrator: Administrator, approve: bool) -> None:
 
 def _approve_and_execute(administrator: Administrator, incident: Incident) -> None:
     try:
-        if not is_dry_run_enabled():
+        dry_run_was_enabled = is_dry_run_enabled()
+
+        if not dry_run_was_enabled:
             reauthenticate_for_critical_action(
                 administrator, "APPROVE_REAL_DISRUPTIVE_REMEDIATION"
             )
+
         approve_incident(incident, administrator.administrator_id)
         result = execute_authorized_remediation(incident)
         click.echo(_execution_result_message(result))
-    except (ReauthenticationError, RemediationError, ConcurrentDecisionError) as exc:
+
+        if not result.simulated:
+            return
+
+        click.echo(
+            "\nThe incident may still be active because DRY-RUN "
+            "prevented the SNMP write."
+        )
+
+        execute_real = click.confirm(
+            "Do you want to execute this remediation for real?",
+            default=False,
+        )
+
+        if not execute_real:
+            click.echo(
+                "Real remediation cancelled. "
+                "DRY-RUN remains ON. No SNMP SET was sent."
+            )
+            return
+
+        change_dry_run_mode(False, administrator)
+        click.echo("Dry-run mode is now OFF.")
+
+        resume_simulated_remediation_for_real(
+            incident,
+            administrator.administrator_id,
+        )
+
+        real_result = execute_authorized_remediation(incident)
+        click.echo(_execution_result_message(real_result))
+
+    except (
+        ReauthenticationError,
+        RemediationError,
+        ConcurrentDecisionError,
+    ) as exc:
         click.echo(str(exc))
 
 

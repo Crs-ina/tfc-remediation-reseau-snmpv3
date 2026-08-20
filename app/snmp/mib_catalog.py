@@ -31,6 +31,7 @@ class MibProbe:
 
 SYS_UP_TIME = MibObjectRef("SNMPv2-MIB", "sysUpTime", (0,))
 SYS_NAME = MibObjectRef("SNMPv2-MIB", "sysName", (0,))
+SYS_DESCR = MibObjectRef("SNMPv2-MIB", "sysDescr", (0,))
 IF_NAME = MibObjectRef("IF-MIB", "ifName")
 IF_DESCR = MibObjectRef("IF-MIB", "ifDescr")
 IF_ADMIN_STATUS = MibObjectRef("IF-MIB", "ifAdminStatus")
@@ -61,6 +62,7 @@ REQUIRED_MIB_MODULES: tuple[str, ...] = (
 
 WARMUP_OBJECTS: tuple[MibObjectRef, ...] = (
     SYS_NAME,
+    SYS_DESCR,
     SYS_UP_TIME,
     DOT1Q_TP_FDB_PORT,
     DOT1D_BASE_PORT_IF_INDEX,

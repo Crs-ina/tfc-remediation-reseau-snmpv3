@@ -82,7 +82,7 @@ def test_snmpv3_profile_requires_sha256_and_aes256_and_hides_secrets():
         ).validate()
 
 
-def test_remediation_client_rejects_missing_authorization_and_non_pvid_object():
+def test_remediation_client_rejects_missing_authorization_and_unsupported_objects():
     registry = MibRegistry(package="pysnmp_mibs")
     registry.warm_up()
     client = SnmpRemediationClient(
@@ -95,6 +95,7 @@ def test_remediation_client_rejects_missing_authorization_and_non_pvid_object():
         registry,
     )
 
+    # Both controlled write objects still require explicit authorization.
     with pytest.raises(SnmpWriteBlocked, match="authorization"):
         asyncio.run(
             client.set_integer(
@@ -102,15 +103,24 @@ def test_remediation_client_rejects_missing_authorization_and_non_pvid_object():
             )
         )
 
+    with pytest.raises(SnmpWriteBlocked, match="authorization"):
+        asyncio.run(
+            client.set_integer(
+                IF_ADMIN_STATUS.with_indices(7), 2, write_authorized=False
+            )
+        )
+
+    # Read-only / unsupported objects must never reach the SNMP SET transport.
     with pytest.raises(SnmpWriteBlocked, match="not enabled"):
         asyncio.run(
             client.set_integer(SYS_NAME, 18, write_authorized=True)
         )
 
+    # A writable object without a concrete instance/index must also be rejected.
     with pytest.raises(SnmpWriteBlocked, match="not enabled"):
         asyncio.run(
             client.set_integer(
-                IF_ADMIN_STATUS.with_indices(7), 2, write_authorized=True
+                IF_ADMIN_STATUS, 2, write_authorized=True
             )
         )
 

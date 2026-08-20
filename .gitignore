@@ -40,3 +40,8 @@ data/runtime-settings.json
 
 # Packaging Python
 *.egg-info/
+
+# Sauvegardes locales OKAPI
+config/*.backup
+data/*.backup*
+data/*backup*

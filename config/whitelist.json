@@ -7,5 +7,12 @@
     "router_firewall_gateway",
     "server"
   ],
-  "entries": []
+  "entries": [
+    {
+      "switch_id": "SW-ARISTA-01",
+      "port_index": 3,
+      "category": "management",
+      "reason": "Port de management du serveur de remediation OKAPI - VLAN 13"
+    }
+  ]
 }

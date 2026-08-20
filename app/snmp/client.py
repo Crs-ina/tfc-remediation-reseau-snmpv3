@@ -1,9 +1,24 @@
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass, field
 
-from .mib_catalog import DOT1Q_PVID, MibObjectRef
+from cryptography.utils import CryptographyDeprecationWarning
+
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"CFB has been moved to cryptography\.hazmat\.decrepit\.ciphers\.modes\.CFB.*",
+    category=CryptographyDeprecationWarning,
+    module=r"pysnmp\.proto\.secmod\.rfc3826\.priv\.aes",
+)
+
+from .mib_catalog import (
+    DOT1Q_PVID,
+    IF_ADMIN_STATUS,
+    MibObjectRef,
+)
 from .mib_registry import MibRegistry
 
 
@@ -236,10 +251,13 @@ class SnmpRemediationClient(SnmpReadClient):
             raise SnmpWriteBlocked("DRY_RUN blocks every SNMP SET.")
         if not write_authorized:
             raise SnmpWriteBlocked("SET rejected without explicit authorization.")
-        # Absolute transport boundary: only the laboratory-validated PVID
-        # object can ever reach PySNMP SET. Other proposed actions remain
-        # TO_BE_VALIDATED and are stopped by the capability gate upstream.
-        allowed_objects = {DOT1Q_PVID.key}
+        # Absolute transport boundary: only explicitly controlled objects
+        # may reach PySNMP SET. The capability gate upstream still decides
+        # whether an object is qualified for normal remediation.
+        allowed_objects = {
+            DOT1Q_PVID.key,
+            IF_ADMIN_STATUS.key,
+        }
         if object_ref.key not in allowed_objects or not object_ref.indices:
             raise SnmpWriteBlocked(
                 f"Object not enabled for a controlled SET: {object_ref.key}"
@@ -260,7 +278,11 @@ class SnmpRemediationClient(SnmpReadClient):
                 api["ContextData"](),
                 api["ObjectType"](
                     api["ObjectIdentity"](resolved.oid),
-                    api["Integer32"](int(value)),
+                    (
+                        api["Unsigned32"](int(value))
+                        if object_ref.key == DOT1Q_PVID.key
+                        else api["Integer32"](int(value))
+                    ),
                 ),
             )
             return self._extract_value(result, api)
@@ -283,7 +305,7 @@ def _pysnmp_api() -> dict:
             usmAesCfb256Protocol,
             usmHMAC192SHA256AuthProtocol,
         )
-        from pysnmp.proto.rfc1902 import Integer32
+        from pysnmp.proto.rfc1902 import Integer32, Unsigned32
         from pysnmp.proto.rfc1905 import EndOfMibView, NoSuchInstance, NoSuchObject
     except ImportError as exc:
         raise RuntimeError(
@@ -303,6 +325,7 @@ def _pysnmp_api() -> dict:
         "usmAesCfb256Protocol": usmAesCfb256Protocol,
         "usmHMAC192SHA256AuthProtocol": usmHMAC192SHA256AuthProtocol,
         "Integer32": Integer32,
+        "Unsigned32": Unsigned32,
         "EndOfMibView": EndOfMibView,
         "NoSuchInstance": NoSuchInstance,
         "NoSuchObject": NoSuchObject,

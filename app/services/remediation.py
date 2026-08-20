@@ -255,6 +255,65 @@ def execute_authorized_remediation(incident: Incident):
     return execute_snmp_action(incident)
 
 
+def resume_simulated_remediation_for_real(
+    incident: Incident,
+    administrator_id: str,
+) -> Remediation:
+    """Re-authorize a supervised DRY-RUN result for explicit real execution."""
+
+    try:
+        require_administrator(administrator_id)
+    except IdentityError as exc:
+        raise RemediationError(str(exc)) from exc
+
+    if incident.processing_status != "SIMULATED":
+        raise RemediationError(
+            "Only a simulated incident can be resumed for real execution."
+        )
+
+    remediation = _latest_remediation_or_fail(incident)
+
+    if remediation.status != "DRY_RUN":
+        raise RemediationError(
+            "The latest remediation is not a DRY-RUN result."
+        )
+
+    if remediation.authorization_mode != "SUPERVISED":
+        raise RemediationError(
+            "Only a supervised simulated remediation can be resumed here."
+        )
+
+    previous_state = incident.processing_status
+
+    incident.processing_status = "ADMIN_APPROVED"
+    remediation.status = "AUTHORIZED_PENDING_EXECUTION"
+    remediation.end_time = None
+
+    record_audit(
+        incident_id=incident.incident_id,
+        remediation_id=remediation.remediation_id,
+        administrator_id=administrator_id,
+        event_type="DRY_RUN_REAL_EXECUTION_CONFIRMED",
+        message=(
+            "Administrator explicitly requested real execution "
+            "after a successful DRY-RUN."
+        ),
+        port_index=remediation.port_index,
+        target_mac=remediation.target_mac_address,
+        incident_type=incident.incident_type,
+        action_type=remediation.action_type,
+        result_status="ADMIN_APPROVED",
+        details={
+            "administrator_id": administrator_id,
+            "state_before": previous_state,
+            "dry_run_result": "SIMULATED",
+        },
+    )
+
+    db.session.commit()
+    return remediation
+
+
 def _current_or_new_remediation(
     incident: Incident,
     *,

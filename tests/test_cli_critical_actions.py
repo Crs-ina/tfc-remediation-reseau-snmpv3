@@ -53,6 +53,10 @@ def test_dry_run_approval_does_not_request_system_password(app, monkeypatch) -> 
         "app.cli.okapi.execute_authorized_remediation",
         lambda _incident: SimpleNamespace(simulated=True, success=False),
     )
+    monkeypatch.setattr(
+        "app.cli.okapi.click.confirm",
+        lambda *_args, **_kwargs: False,
+    )
 
     with app.app_context():
         app.config["DRY_RUN"] = True

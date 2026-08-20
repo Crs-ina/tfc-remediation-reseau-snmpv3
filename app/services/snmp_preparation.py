@@ -182,8 +182,36 @@ def prepare_port_incident_with_snmp(
     try:
         if_index = int(asyncio.run(read_client.read_scalar(DOT1D_BASE_PORT_IF_INDEX.with_indices(bridge_port))))
         interface_name = str(asyncio.run(read_client.read_scalar(IF_DESCR.with_indices(if_index))))
-        if interface_hint and interface_hint.strip().lower() != interface_name.strip().lower():
-            _block_preparation(incident, event_type="TARGET_MISMATCH", message="Zabbix interface hint does not match SNMP.", details={"hint": interface_hint, "observed": interface_name})
+        if interface_hint:
+            raw_hint = interface_hint.strip()
+            normalized_hint = raw_hint.lower()
+
+            if normalized_hint.startswith("ifindex:"):
+                try:
+                    hinted_if_index = int(raw_hint.split(":", 1)[1].strip())
+                except (TypeError, ValueError):
+                    _block_preparation(
+                        incident,
+                        event_type="TARGET_MISMATCH",
+                        message="Invalid ifIndex supplied by Zabbix.",
+                        details={"hint": interface_hint, "observed_if_index": if_index},
+                    )
+
+                target_matches = hinted_if_index == if_index
+            else:
+                target_matches = normalized_hint == interface_name.strip().lower()
+
+            if not target_matches:
+                _block_preparation(
+                    incident,
+                    event_type="TARGET_MISMATCH",
+                    message="Zabbix interface hint does not match SNMP.",
+                    details={
+                        "hint": interface_hint,
+                        "observed": interface_name,
+                        "observed_if_index": if_index,
+                    },
+                )
         previous_port_status = str(asyncio.run(read_client.read_scalar(IF_ADMIN_STATUS.with_indices(if_index))))
         previous_pvid = None
         if playbook.action == "QUARANTINE_VLAN":
