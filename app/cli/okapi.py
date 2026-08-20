@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import random
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import click
 from flask import current_app
 from flask.cli import AppGroup, with_appcontext
+from sqlalchemy import or_
 
 from app.extensions import db
 from app.models import Administrator, AuditLog, Incident, Remediation
@@ -271,40 +272,118 @@ def _remediation_history() -> None:
         )
 
 
-def _logs() -> None:
+def _audit_contains_pattern(value: str) -> str:
+    """Return a literal, case-insensitive SQL LIKE contains pattern."""
+
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _audit_day_bounds(value: str) -> tuple[datetime, datetime]:
+    """Convert one Kinshasa calendar day to an inclusive/exclusive UTC range."""
+
+    try:
+        selected_date = datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise ValueError("Date must use YYYY-MM-DD.") from exc
+    local_start = datetime.combine(
+        selected_date,
+        datetime.min.time(),
+        tzinfo=ZoneInfo("Africa/Kinshasa"),
+    )
+    utc_start = local_start.astimezone(timezone.utc)
+    return utc_start, (local_start + timedelta(days=1)).astimezone(timezone.utc)
+
+
+def _filtered_audit_statement(
+    *,
+    date_value: str = "",
+    incident_type: str = "",
+    action: str = "",
+    result: str = "",
+    administrator: str = "",
+    switch: str = "",
+    port: str = "",
+):
+    """Build independent audit filters; non-empty fields combine with AND."""
+
     statement = db.select(AuditLog).order_by(AuditLog.event_timestamp.desc())
+    if date_value:
+        start, end = _audit_day_bounds(date_value)
+        statement = statement.where(
+            AuditLog.event_timestamp >= start,
+            AuditLog.event_timestamp < end,
+        )
+    if incident_type:
+        statement = statement.where(
+            AuditLog.incident_type.ilike(
+                _audit_contains_pattern(incident_type), escape="\\"
+            )
+        )
+    if action:
+        statement = statement.where(
+            AuditLog.action_type.ilike(_audit_contains_pattern(action), escape="\\")
+        )
+    if result:
+        statement = statement.where(
+            AuditLog.result_status.ilike(_audit_contains_pattern(result), escape="\\")
+        )
+    if administrator:
+        administrator_pattern = _audit_contains_pattern(administrator)
+        administrator_conditions = [
+            Administrator.system_username.ilike(
+                administrator_pattern, escape="\\"
+            )
+        ]
+        if administrator.casefold() in "system":
+            administrator_conditions.append(AuditLog.administrator_id.is_(None))
+        statement = statement.outerjoin(AuditLog.administrator).where(
+            or_(*administrator_conditions)
+        )
+    if switch:
+        statement = statement.where(
+            AuditLog.equipment_name.ilike(
+                _audit_contains_pattern(switch), escape="\\"
+            )
+        )
+    if port:
+        try:
+            port_index = int(port)
+        except ValueError as exc:
+            raise ValueError("Port must be a number.") from exc
+        statement = statement.where(AuditLog.port_index == port_index)
+    return statement
+
+
+def _logs() -> None:
     mode = click.prompt("[1] Latest logs [2] Filter logs [B] Back", default="1").strip().upper()
     if mode == "B":
         return
+    statement = db.select(AuditLog).order_by(AuditLog.event_timestamp.desc())
     if mode == "2":
+        date_value = click.prompt("Date (YYYY-MM-DD, blank = any)", default="", show_default=False).strip()
         incident_type = click.prompt("Incident type (blank = any)", default="", show_default=False).strip()
         action = click.prompt("Action (blank = any)", default="", show_default=False).strip()
         result = click.prompt("Result (blank = any)", default="", show_default=False).strip()
         administrator = click.prompt("Administrator (blank = any)", default="", show_default=False).strip()
         switch = click.prompt("Switch name (blank = any)", default="", show_default=False).strip()
         port = click.prompt("Port index (blank = any)", default="", show_default=False).strip()
-        if incident_type:
-            statement = statement.where(AuditLog.incident_type == incident_type)
-        if action:
-            statement = statement.where(AuditLog.action_type == action)
-        if result:
-            statement = statement.where(AuditLog.result_status == result)
-        if administrator:
-            if administrator.upper() == "SYSTEM":
-                statement = statement.where(AuditLog.administrator_id.is_(None))
-            else:
-                statement = statement.join(AuditLog.administrator).where(
-                    Administrator.system_username == administrator
-                )
-        if switch:
-            statement = statement.where(AuditLog.equipment_name == switch)
-        if port:
-            try:
-                statement = statement.where(AuditLog.port_index == int(port))
-            except ValueError:
-                click.echo("Port must be a number.")
-                return
-    entries = list(db.session.execute(statement.limit(20)).scalars())
+        try:
+            statement = _filtered_audit_statement(
+                date_value=date_value,
+                incident_type=incident_type,
+                action=action,
+                result=result,
+                administrator=administrator,
+                switch=switch,
+                port=port,
+            )
+        except ValueError as exc:
+            click.echo(str(exc))
+            return
+    if mode != "2":
+        statement = statement.limit(20)
+    entries = list(db.session.execute(statement).scalars())
     if not entries:
         click.echo("No audit logs found.")
         return

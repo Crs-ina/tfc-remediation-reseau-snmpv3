@@ -254,8 +254,8 @@ Commande exécutée :
 pytest -q -p no:cacheprovider
 ```
 
-Résultat final après les correctifs fonctionnels et le splash :
-**125 passed, 3 skipped**.
+Résultat final après les correctifs fonctionnels, le splash et les filtres
+d’audit : **140 passed, 3 skipped**.
 
 Les trois tests ignorés sont les tests d'intégration EVE-NG, désactivés par
 défaut. Aucun test matériel réel n'a été prétendu ni exécuté dans cette

@@ -51,6 +51,34 @@ The complete specification for authorization modes, executor identity,
 dynamic VLAN/interface rollback, Available Rollbacks filtering and audit
 events is in [REMEDIATION_ROLLBACK_CHANGES.md](REMEDIATION_ROLLBACK_CHANGES.md).
 
+## Audit log filters
+
+`Audit logs > Filter logs` accepts these independent optional fields:
+
+```text
+Date (YYYY-MM-DD, blank = any)
+Incident type (blank = any)
+Action (blank = any)
+Result (blank = any)
+Administrator (blank = any)
+Switch name (blank = any)
+Port index (blank = any)
+```
+
+Text fields use a case-insensitive literal `contains` match against their own
+column only. For example, `vlan`, `shut`, `exau` and `aris` match values in
+`incident_type`, `action_type`, `Administrator.system_username` and
+`equipment_name` respectively. Blank fields add no SQL condition. Multiple
+non-blank fields are combined with `AND`.
+
+The date represents the complete local day in `Africa/Kinshasa`; OKAPI converts
+its bounds to UTC before querying `event_timestamp`. Administrator searches
+also treat any matching substring of `SYSTEM` (such as `sys`) as events whose
+`administrator_id` is null. Port index remains an exact integer match.
+
+Filtered searches return all matches. `Latest logs` remains unchanged and
+continues to display the latest 20 entries.
+
 For maintenance, `flask --app run.py incidents list --from "2026-01-08 16:00"
 --to "2026-01-08 17:00"` and `incidents logs` support local-time filters.
 SNMP discovery remains read-only. Real writes remain behind target,
