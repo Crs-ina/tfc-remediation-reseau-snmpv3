@@ -267,6 +267,7 @@ def execute_interface_admin_action(
     *,
     client: SnmpRemediationClient | None = None,
     snmp_config: SnmpV3Config | None = None,
+    clock: Callable[[], float] = perf_counter,
 ) -> SnmpExecutionResult:
     if incident.processing_status not in {"ADMIN_APPROVED", "AUTOMATICALLY_AUTHORIZED"}:
         raise RemediationError("Explicit authorization is required before an SNMP SET.")
@@ -304,12 +305,15 @@ def execute_interface_admin_action(
         mib_registry,
         dry_run=is_dry_run_enabled(),
     )
+    pre_timing = _preapproval_timing(incident.incident_id)
+    revalidation_started = clock()
     try:
         if_index = int(asyncio.run(write_client.read_scalar(DOT1D_BASE_PORT_IF_INDEX.with_indices(remediation.port_index))))
         object_ref = IF_ADMIN_STATUS.with_indices(if_index)
         observed_before = int(asyncio.run(write_client.read_scalar(object_ref)))
     except (SnmpClientError, ValueError) as exc:
         _fail_execution(incident, remediation, "PRE_ACTION_READ_FAILED", str(exc))
+    revalidation_seconds = clock() - revalidation_started
     saved_previous = _admin_status_value(remediation.previous_port_status)
     if observed_before != saved_previous:
         _fail_execution(
@@ -328,12 +332,26 @@ def execute_interface_admin_action(
                 observed, set_seconds, verification_seconds = _set_and_verify(
                     write_client, object_ref, expected,
                     incident=incident, remediation=remediation,
+                    clock=clock,
                 )
             except RemediationVerificationError as exc:
                 _fail_execution(incident, remediation, "SNMP_SET_OR_GET_FAILED", str(exc))
     except PortBusyError as exc:
         _block_execution(incident, remediation, str(exc), status="COOLDOWN_BLOCKED")
-    timing = ExecutionTiming(0.0, 0.0, set_seconds, verification_seconds, set_seconds + verification_seconds)
+    total_automated_seconds = (
+        pre_timing["identification"]
+        + pre_timing["prechecks"]
+        + revalidation_seconds
+        + set_seconds
+        + verification_seconds
+    )
+    timing = ExecutionTiming(
+        identification_seconds=pre_timing["identification"],
+        prechecks_seconds=pre_timing["prechecks"] + revalidation_seconds,
+        snmp_set_seconds=set_seconds,
+        verification_seconds=verification_seconds,
+        total_automated_seconds=total_automated_seconds,
+    )
     if observed != expected:
         _fail_execution(incident, remediation, "SNMP_POST_ACTION_MISMATCH", f"Expected {expected}, observed {observed}")
     remediation.status = "SUCCEEDED"
@@ -352,7 +370,12 @@ def execute_interface_admin_action(
         incident_type=incident.incident_type, action_type=remediation.action_type,
         result_status="SUCCEEDED", details={"mib_object": IF_ADMIN_STATUS.key, "if_index": if_index,
         "requested_value": expected, "observed_value": observed, "authorization_mode": remediation.authorization_mode,
-        "t_snmp_set_seconds": set_seconds, "t_verification_seconds": verification_seconds},
+        "t_identification_seconds": timing.identification_seconds,
+        "t_prechecks_seconds": timing.prechecks_seconds,
+        "t_snmp_set_seconds": timing.snmp_set_seconds,
+        "t_verification_seconds": timing.verification_seconds,
+        "t_total_automated_seconds": timing.total_automated_seconds,
+        "human_wait_excluded": True},
     )
     db.session.commit()
     return SnmpExecutionResult(remediation.remediation_id, expected, observed, timing)

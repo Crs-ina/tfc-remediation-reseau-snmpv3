@@ -15,6 +15,7 @@ from app.models import (
     Administrator,
     AuditLog,
     Incident,
+    NetworkSwitch,
     Remediation,
 )
 from app.services.administrators import (
@@ -450,6 +451,17 @@ def _history_action_label(record: HistoryRecord) -> str:
 
 
 def _history_mode(record: HistoryRecord) -> str:
+    entries = sorted(
+        record.logs,
+        key=lambda entry: _aware_utc(entry.event_timestamp),
+        reverse=True,
+    )
+    for entry in entries:
+        execution_mode = _audit_details(entry).get("execution_mode")
+        if execution_mode in {"AUTOMATIC", "SUPERVISED", "NONE"}:
+            return str(execution_mode)
+    if _history_result(record) == "ESCALATED":
+        return "NONE"
     if record.remediation:
         return record.remediation.authorization_mode
     return "NONE"
@@ -509,31 +521,73 @@ def _history_administrator(record: HistoryRecord) -> str:
     return "SYSTEM"
 
 
-def _history_actor_line(record: HistoryRecord) -> str:
+def _history_event_administrator(
+    record: HistoryRecord,
+    event_predicate,
+) -> str | None:
+    entries = sorted(
+        record.logs,
+        key=lambda entry: _aware_utc(entry.event_timestamp),
+        reverse=True,
+    )
+    for entry in entries:
+        if (
+            record.remediation
+            and entry.remediation_id != record.remediation.remediation_id
+        ):
+            continue
+        if event_predicate(entry) and entry.administrator:
+            return entry.administrator.system_username
+    return None
+
+
+def _history_actor_line(record: HistoryRecord) -> str | None:
     result = _history_result(record)
-    username = _history_administrator(record)
-    if record.remediation and record.remediation.authorization_mode == "AUTOMATIC":
-        return "Performed by   : SYSTEM"
-    if result == "REJECTED_BY_ADMIN":
-        return f"Rejected by    : {username}"
+    mode = _history_mode(record)
+    if result == "WAITING_ADMIN_APPROVAL":
+        return "Approval       : Pending"
     if "ROLLBACK" in result or any(
         "ROLLBACK" in entry.event_type for entry in record.logs
     ):
-        return f"Requested by   : {username}"
-    if record.remediation and record.remediation.authorization_mode == "SUPERVISED":
-        return f"Approved by    : {username}"
-    return f"Performed by   : {username}"
-
-
-def _audit_reason(entry: AuditLog) -> str | None:
-    if " | " not in entry.message:
+        username = _history_event_administrator(
+            record,
+            lambda entry: "ROLLBACK" in entry.event_type,
+        )
+        return f"Requested by   : {username}" if username else None
+    if result == "ESCALATED" or _history_action(record) == "NO_ACTION":
         return None
+    if result == "REJECTED_BY_ADMIN":
+        username = _history_event_administrator(
+            record,
+            lambda entry: "REJECT" in entry.event_type
+            or "REFUS" in entry.event_type,
+        )
+        return f"Rejected by    : {username}" if username else None
+    if mode == "SUPERVISED":
+        username = _history_event_administrator(
+            record,
+            lambda entry: "APPROV" in entry.event_type,
+        ) or _history_event_administrator(record, lambda _entry: True)
+        return f"Approved by    : {username}" if username else None
+    if mode == "AUTOMATIC":
+        return "Performed by   : SYSTEM"
+    username = _history_event_administrator(record, lambda _entry: True)
+    return f"Performed by   : {username}" if username else None
+
+
+def _audit_details(entry: AuditLog) -> dict[str, object]:
+    if " | " not in entry.message:
+        return {}
     raw_details = entry.message.split(" | ", 1)[1]
     try:
         details = json.loads(raw_details)
     except (TypeError, ValueError):
-        return None
-    reason = details.get("reason") if isinstance(details, dict) else None
+        return {}
+    return details if isinstance(details, dict) else {}
+
+
+def _audit_reason(entry: AuditLog) -> str | None:
+    reason = _audit_details(entry).get("reason")
     return str(reason) if reason else None
 
 
@@ -546,7 +600,7 @@ def _history_reason(record: HistoryRecord) -> str | None:
     for entry in entries:
         reason = _audit_reason(entry)
         if reason:
-            return REASON_LABELS.get(reason, "Not available")
+            return REASON_LABELS.get(reason)
     return None
 
 
@@ -572,12 +626,12 @@ def _display_history(records: list[HistoryRecord]) -> None:
             f"Remediation    : {_history_action_label(record)}",
             f"Mode           : {_history_mode(record)}",
             f"Result         : {_history_result(record)}",
-            _history_actor_line(record),
         ]
+        actor_line = _history_actor_line(record)
+        if actor_line:
+            lines.append(actor_line)
         if reason:
             lines.append(f"Reason         : {reason}")
-        if _history_mode(record) == "NONE" or _history_action(record) == "NO_ACTION":
-            lines.append("Network change : NONE")
         click.echo("\n".join(lines))
         if index != count:
             click.echo("-" * 64)
@@ -596,10 +650,30 @@ def _history_filter_options(
     records: list[HistoryRecord],
     value_getter,
 ) -> list[str]:
+    excluded = {"not available", "unknown incident", "unknown target"}
     return sorted(
-        {value_getter(record) for record in records if value_getter(record)},
+        {
+            value
+            for record in records
+            if (value := value_getter(record))
+            and value.strip().casefold() not in excluded
+        },
         key=str.casefold,
     )
+
+
+def _switch_filter_options() -> list[str]:
+    excluded = {"not available", "unknown target", "pc-suspect"}
+    names = db.session.execute(
+        db.select(NetworkSwitch.name)
+        .distinct()
+        .order_by(NetworkSwitch.name)
+    ).scalars()
+    return [
+        name
+        for name in names
+        if name and name.strip() and name.strip().casefold() not in excluded
+    ]
 
 
 def _prompt_history_filter(
@@ -715,7 +789,7 @@ def _guided_history_filters(records: list[HistoryRecord]) -> list[HistoryRecord]
     ).strip()
     switch = _prompt_history_filter(
         "Filter by switch",
-        _history_filter_options(records, _history_switch_name),
+        _switch_filter_options(),
     )
     port = click.prompt(
         "Port (Ethernet1, Et1 or 1; blank = any)",

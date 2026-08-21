@@ -360,6 +360,63 @@ def test_timing_sums_automated_segments_and_excludes_human_wait(app):
         assert result.timing.total_automated_seconds == pytest.approx(9.75)
 
 
+@pytest.mark.parametrize(
+    ("action_type", "previous_status", "read_values", "expected"),
+    [
+        ("SHUTDOWN_PORT", "up", [200, 1, 2], 2),
+        ("REACTIVATE_PORT", "down", [200, 2, 1], 1),
+    ],
+)
+def test_interface_actions_record_all_automated_timing_metrics(
+    app,
+    monkeypatch,
+    action_type,
+    previous_status,
+    read_values,
+    expected,
+):
+    enable_writes(app)
+    monkeypatch.setattr(
+        "app.services.snmp_execution.require_lab_validated_write",
+        lambda *_args, **_kwargs: None,
+    )
+    clock_values: Iterator[float] = iter([0.0, 0.5, 10.0, 12.0, 20.0, 23.0])
+    with app.app_context():
+        incident, remediation, port = build_waiting_remediation()
+        remediation.action_type = action_type
+        remediation.previous_port_status = previous_status
+        port.status = previous_status
+        db.session.commit()
+        approve(incident)
+
+        result = execute_interface_admin_action(
+            incident,
+            client=FakeWriteClient(read_values),
+            snmp_config=snmp_config(),
+            clock=lambda: next(clock_values),
+        )
+
+        assert result.observed_vlan == expected
+        assert result.timing.identification_seconds == pytest.approx(1.25)
+        assert result.timing.prechecks_seconds == pytest.approx(3.0)
+        assert result.timing.snmp_set_seconds == pytest.approx(2.0)
+        assert result.timing.verification_seconds == pytest.approx(3.0)
+        assert result.timing.total_automated_seconds == pytest.approx(9.25)
+
+        audit = db.session.execute(
+            db.select(AuditLog).where(
+                AuditLog.event_type == "SNMP_REMEDIATION_SUCCEEDED"
+            )
+        ).scalar_one()
+        details = json.loads(audit.message.split(" | ", 1)[1])
+        assert details["t_identification_seconds"] == pytest.approx(1.25)
+        assert details["t_prechecks_seconds"] == pytest.approx(3.0)
+        assert details["t_snmp_set_seconds"] == pytest.approx(2.0)
+        assert details["t_verification_seconds"] == pytest.approx(3.0)
+        assert details["t_total_automated_seconds"] == pytest.approx(9.25)
+        assert details["human_wait_excluded"] is True
+
+
 def test_dry_run_never_calls_set(app):
     app.config.update(SNMP_WRITE_ENABLED=True, DRY_RUN=True)
     with app.app_context():

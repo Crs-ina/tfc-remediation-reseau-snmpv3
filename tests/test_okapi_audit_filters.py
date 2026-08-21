@@ -4,7 +4,7 @@ import pytest
 
 from app.cli.okapi import _logs
 from app.extensions import db
-from app.models import Administrator, AuditLog
+from app.models import Administrator, AuditLog, NetworkSwitch
 
 
 @pytest.fixture()
@@ -354,6 +354,33 @@ def test_guided_filters_accept_partial_information_and_combine(
     assert "OKAPI - INCIDENT & ACTION HISTORY (1 entry)" in output
     assert "Incident       : port_flapping" in output
     assert "Result         : FAILED" in output
+
+
+def test_switch_filter_options_come_only_from_network_switch_inventory(
+    audit_log_dataset, monkeypatch, capsys
+):
+    with audit_log_dataset.app_context():
+        db.session.add(
+            NetworkSwitch(
+                switch_id="switch-filter-source",
+                name="SW-INVENTORY-01",
+                management_ip="192.0.2.90",
+                model="Arista vEOS 4.29.2F",
+            )
+        )
+        db.session.commit()
+
+    output = _run_filter(audit_log_dataset, monkeypatch, capsys)
+    switch_section = output.split("Filter by switch:", 1)[1].split(
+        "Filter by remediation:", 1
+    )[0]
+
+    assert "[0] Any" in switch_section
+    assert "SW-INVENTORY-01" in switch_section
+    assert "SW-ARISTA-01" not in switch_section
+    assert "SW-CISCO-01" not in switch_section
+    assert "PC-SUSPECT" not in switch_section
+    assert "Not available" not in switch_section
 
 
 @pytest.mark.parametrize(
