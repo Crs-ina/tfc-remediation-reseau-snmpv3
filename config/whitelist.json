@@ -13,6 +13,12 @@
       "port_index": 3,
       "category": "management",
       "reason": "Port de management du serveur de remediation OKAPI - VLAN 13"
+    },
+    {
+      "switch_id": "SW-ARISTA-01",
+      "port_index": 2,
+      "category": "critical_access_point",
+      "reason": "Test experimental de la whitelist sur Ethernet2"
     }
   ]
 }
