@@ -56,28 +56,30 @@ events is in [REMEDIATION_ROLLBACK_CHANGES.md](REMEDIATION_ROLLBACK_CHANGES.md).
 `Audit logs > Filter logs` accepts these independent optional fields:
 
 ```text
-Date (YYYY-MM-DD, blank = any)
-Incident type (blank = any)
-Action (blank = any)
-Result (blank = any)
-Administrator (blank = any)
-Switch name (blank = any)
-Port index (blank = any)
+Date / period (YYYY, YYYY-MM, or YYYY-MM-DD; blank = any)
+Search word or phrase (blank = any)
 ```
 
-Text fields use a case-insensitive literal `contains` match against their own
-column only. For example, `vlan`, `shut`, `exau` and `aris` match values in
-`incident_type`, `action_type`, `Administrator.system_username` and
-`equipment_name` respectively. Blank fields add no SQL condition. Multiple
-non-blank fields are combined with `AND`.
+The date is progressive: `2026` selects the whole year, `2026-08` the whole
+month and `2026-08-20` the complete local day in `Africa/Kinshasa`. OKAPI
+converts those local bounds to UTC before querying `event_timestamp`.
 
-The date represents the complete local day in `Africa/Kinshasa`; OKAPI converts
-its bounds to UTC before querying `event_timestamp`. Administrator searches
-also treat any matching substring of `SYSTEM` (such as `sys`) as events whose
-`administrator_id` is null. Port index remains an exact integer match.
+The second field is a case-insensitive free search across the complete useful
+context: date, event, incident type/description, action, result, administrator,
+switch, equipment/target addresses, port and audit message. It also searches
+the linked remediation and inventory when an older audit row does not repeat
+all that context. A phrase is split into words, so `VLAN policy` matches a
+stored value such as `VLAN_POLICY_VIOLATION`, and `port flapping` matches
+`port_flapping`. Every word must be present somewhere in the same audit
+context; the words do not have to belong to the same database column. A blank
+search returns every entry in the selected period.
 
 Filtered searches return all matches. `Latest logs` remains unchanged and
-continues to display the latest 20 entries.
+continues to select the latest 20 entries. Both modes render each entry as a
+readable audit card containing date/time, action, result, administrator, switch
+and port. When a remediation is linked, `Result` shows its final status. When an
+older audit row does not duplicate its switch, port or action, OKAPI obtains
+that context from the linked remediation record.
 
 For maintenance, `flask --app run.py incidents list --from "2026-01-08 16:00"
 --to "2026-01-08 17:00"` and `incidents logs` support local-time filters.

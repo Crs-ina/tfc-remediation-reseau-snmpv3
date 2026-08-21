@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import random
+import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import click
 from flask import current_app
 from flask.cli import AppGroup, with_appcontext
-from sqlalchemy import or_
+from sqlalchemy import String, cast, or_
 
 from app.extensions import db
-from app.models import Administrator, AuditLog, Incident, Remediation
+from app.models import (
+    Administrator,
+    AuditLog,
+    Incident,
+    NetworkSwitch,
+    Remediation,
+    SwitchPort,
+)
 from app.services.administrators import (
     IdentityError,
     ReauthenticationError,
@@ -279,80 +287,160 @@ def _audit_contains_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _audit_day_bounds(value: str) -> tuple[datetime, datetime]:
-    """Convert one Kinshasa calendar day to an inclusive/exclusive UTC range."""
+def _audit_period_bounds(value: str) -> tuple[datetime, datetime]:
+    """Convert a Kinshasa year, month or day to UTC query bounds."""
 
+    zone = ZoneInfo("Africa/Kinshasa")
     try:
-        selected_date = datetime.strptime(value, "%Y-%m-%d").date()
+        if re.fullmatch(r"\d{4}", value):
+            local_start = datetime(int(value), 1, 1, tzinfo=zone)
+            local_end = local_start.replace(year=local_start.year + 1)
+        elif re.fullmatch(r"\d{4}-\d{2}", value):
+            local_start = datetime.strptime(value, "%Y-%m").replace(tzinfo=zone)
+            if local_start.month == 12:
+                local_end = local_start.replace(
+                    year=local_start.year + 1,
+                    month=1,
+                )
+            else:
+                local_end = local_start.replace(month=local_start.month + 1)
+        elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            local_start = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=zone)
+            local_end = local_start + timedelta(days=1)
+        else:
+            raise ValueError
     except ValueError as exc:
-        raise ValueError("Date must use YYYY-MM-DD.") from exc
-    local_start = datetime.combine(
-        selected_date,
-        datetime.min.time(),
-        tzinfo=ZoneInfo("Africa/Kinshasa"),
-    )
-    utc_start = local_start.astimezone(timezone.utc)
-    return utc_start, (local_start + timedelta(days=1)).astimezone(timezone.utc)
+        raise ValueError(
+            "Date must use YYYY, YYYY-MM, or YYYY-MM-DD."
+        ) from exc
+    return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
+
+
+def _audit_search_terms(value: str) -> list[str]:
+    """Split a free search into words so spaces also match stored underscores."""
+
+    return [term for term in re.split(r"[\W_]+", value, flags=re.UNICODE) if term]
+
+
+def _audit_term_conditions(term: str):
+    """Return every audit/remediation field in which one word may appear."""
+
+    pattern = _audit_contains_pattern(term)
+    conditions = [
+        cast(AuditLog.event_timestamp, String).ilike(pattern, escape="\\"),
+        AuditLog.event_type.ilike(pattern, escape="\\"),
+        AuditLog.incident_type.ilike(pattern, escape="\\"),
+        AuditLog.action_type.ilike(pattern, escape="\\"),
+        AuditLog.result_status.ilike(pattern, escape="\\"),
+        AuditLog.equipment_name.ilike(pattern, escape="\\"),
+        AuditLog.equipment_ip.ilike(pattern, escape="\\"),
+        cast(AuditLog.port_index, String).ilike(pattern, escape="\\"),
+        AuditLog.target_ip.ilike(pattern, escape="\\"),
+        AuditLog.target_mac.ilike(pattern, escape="\\"),
+        AuditLog.message.ilike(pattern, escape="\\"),
+        Administrator.system_username.ilike(pattern, escape="\\"),
+        AuditLog.incident.has(
+            or_(
+                Incident.incident_type.ilike(pattern, escape="\\"),
+                Incident.description.ilike(pattern, escape="\\"),
+            )
+        ),
+        AuditLog.remediation.has(
+            or_(
+                Remediation.action_type.ilike(pattern, escape="\\"),
+                Remediation.status.ilike(pattern, escape="\\"),
+                cast(Remediation.port_index, String).ilike(pattern, escape="\\"),
+                Remediation.switch_port.has(
+                    SwitchPort.network_switch.has(
+                        NetworkSwitch.name.ilike(pattern, escape="\\")
+                    )
+                ),
+            )
+        ),
+    ]
+    if term.casefold() in "system":
+        conditions.append(AuditLog.administrator_id.is_(None))
+    return conditions
 
 
 def _filtered_audit_statement(
     *,
     date_value: str = "",
-    incident_type: str = "",
-    action: str = "",
-    result: str = "",
-    administrator: str = "",
-    switch: str = "",
-    port: str = "",
+    search: str = "",
 ):
-    """Build independent audit filters; non-empty fields combine with AND."""
+    """Build a period filter plus a free multi-field, multi-word search."""
 
     statement = db.select(AuditLog).order_by(AuditLog.event_timestamp.desc())
     if date_value:
-        start, end = _audit_day_bounds(date_value)
+        start, end = _audit_period_bounds(date_value)
         statement = statement.where(
             AuditLog.event_timestamp >= start,
             AuditLog.event_timestamp < end,
         )
-    if incident_type:
-        statement = statement.where(
-            AuditLog.incident_type.ilike(
-                _audit_contains_pattern(incident_type), escape="\\"
-            )
-        )
-    if action:
-        statement = statement.where(
-            AuditLog.action_type.ilike(_audit_contains_pattern(action), escape="\\")
-        )
-    if result:
-        statement = statement.where(
-            AuditLog.result_status.ilike(_audit_contains_pattern(result), escape="\\")
-        )
-    if administrator:
-        administrator_pattern = _audit_contains_pattern(administrator)
-        administrator_conditions = [
-            Administrator.system_username.ilike(
-                administrator_pattern, escape="\\"
-            )
-        ]
-        if administrator.casefold() in "system":
-            administrator_conditions.append(AuditLog.administrator_id.is_(None))
-        statement = statement.outerjoin(AuditLog.administrator).where(
-            or_(*administrator_conditions)
-        )
-    if switch:
-        statement = statement.where(
-            AuditLog.equipment_name.ilike(
-                _audit_contains_pattern(switch), escape="\\"
-            )
-        )
-    if port:
-        try:
-            port_index = int(port)
-        except ValueError as exc:
-            raise ValueError("Port must be a number.") from exc
-        statement = statement.where(AuditLog.port_index == port_index)
+    terms = _audit_search_terms(search)
+    if terms:
+        statement = statement.outerjoin(AuditLog.administrator)
+        for term in terms:
+            statement = statement.where(or_(*_audit_term_conditions(term)))
     return statement
+
+
+def _audit_action(entry: AuditLog) -> str:
+    if entry.action_type:
+        return entry.action_type
+    if entry.remediation:
+        return entry.remediation.action_type
+    return "Not available"
+
+
+def _audit_result(entry: AuditLog) -> str:
+    if entry.remediation:
+        return entry.remediation.status
+    if entry.result_status:
+        return entry.result_status
+    return "INFO"
+
+
+def _audit_switch_name(entry: AuditLog) -> str:
+    if entry.equipment_name:
+        return entry.equipment_name
+    if entry.remediation and entry.remediation.switch_port:
+        return entry.remediation.switch_port.network_switch.name
+    return "Not available"
+
+
+def _audit_port(entry: AuditLog) -> str:
+    if entry.port_index is not None:
+        return str(entry.port_index)
+    if entry.remediation and entry.remediation.port_index is not None:
+        return str(entry.remediation.port_index)
+    return "Not available"
+
+
+def _audit_administrator(entry: AuditLog) -> str:
+    if entry.administrator:
+        return entry.administrator.system_username
+    return "SYSTEM"
+
+
+def _display_audit_entries(entries: list[AuditLog]) -> None:
+    count = len(entries)
+    label = "entry" if count == 1 else "entries"
+    click.echo(f"\nOKAPI - AUDIT LOGS ({count} {label})")
+    click.echo("=" * 56)
+    for index, entry in enumerate(entries, start=1):
+        click.echo(
+            f"[{index}/{count}]\n"
+            f"Date / time   : {local_time(entry.event_timestamp)}\n"
+            f"Event         : {entry.event_type}\n"
+            f"Action        : {_audit_action(entry)}\n"
+            f"Result        : {_audit_result(entry)}\n"
+            f"Administrator : {_audit_administrator(entry)}\n"
+            f"Switch        : {_audit_switch_name(entry)}\n"
+            f"Port          : {_audit_port(entry)}"
+        )
+        if index != count:
+            click.echo("-" * 56)
 
 
 def _logs() -> None:
@@ -361,22 +449,20 @@ def _logs() -> None:
         return
     statement = db.select(AuditLog).order_by(AuditLog.event_timestamp.desc())
     if mode == "2":
-        date_value = click.prompt("Date (YYYY-MM-DD, blank = any)", default="", show_default=False).strip()
-        incident_type = click.prompt("Incident type (blank = any)", default="", show_default=False).strip()
-        action = click.prompt("Action (blank = any)", default="", show_default=False).strip()
-        result = click.prompt("Result (blank = any)", default="", show_default=False).strip()
-        administrator = click.prompt("Administrator (blank = any)", default="", show_default=False).strip()
-        switch = click.prompt("Switch name (blank = any)", default="", show_default=False).strip()
-        port = click.prompt("Port index (blank = any)", default="", show_default=False).strip()
+        date_value = click.prompt(
+            "Date / period (YYYY, YYYY-MM, or YYYY-MM-DD; blank = any)",
+            default="",
+            show_default=False,
+        ).strip()
+        search = click.prompt(
+            "Search word or phrase (blank = any)",
+            default="",
+            show_default=False,
+        ).strip()
         try:
             statement = _filtered_audit_statement(
                 date_value=date_value,
-                incident_type=incident_type,
-                action=action,
-                result=result,
-                administrator=administrator,
-                switch=switch,
-                port=port,
+                search=search,
             )
         except ValueError as exc:
             click.echo(str(exc))
@@ -387,11 +473,7 @@ def _logs() -> None:
     if not entries:
         click.echo("No audit logs found.")
         return
-    for entry in entries:
-        click.echo(
-            f"{local_time(entry.event_timestamp)} | {_actor_label(entry)} | "
-            f"{entry.event_type} | {entry.result_status or 'INFO'}"
-        )
+    _display_audit_entries(entries)
 
 
 def _actor_label(entry: AuditLog | None) -> str:
