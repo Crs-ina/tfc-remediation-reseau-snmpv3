@@ -1,23 +1,21 @@
 from __future__ import annotations
 
+import json
 import random
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import click
 from flask import current_app
 from flask.cli import AppGroup, with_appcontext
-from sqlalchemy import String, cast, or_
-
 from app.extensions import db
 from app.models import (
     Administrator,
     AuditLog,
     Incident,
-    NetworkSwitch,
     Remediation,
-    SwitchPort,
 )
 from app.services.administrators import (
     IdentityError,
@@ -280,13 +278,6 @@ def _remediation_history() -> None:
         )
 
 
-def _audit_contains_pattern(value: str) -> str:
-    """Return a literal, case-insensitive SQL LIKE contains pattern."""
-
-    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
 def _audit_period_bounds(value: str) -> tuple[datetime, datetime]:
     """Convert a Kinshasa year, month or day to UTC query bounds."""
 
@@ -316,164 +307,481 @@ def _audit_period_bounds(value: str) -> tuple[datetime, datetime]:
     return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
 
 
-def _audit_search_terms(value: str) -> list[str]:
-    """Split a free search into words so spaces also match stored underscores."""
+ACTION_LABELS = {
+    "REACTIVATE_PORT": "Reactivate port",
+    "SHUTDOWN_PORT": "Shutdown port",
+    "QUARANTINE_VLAN": "Quarantine VLAN",
+    "NO_ACTION": "No network action",
+}
 
-    return [term for term in re.split(r"[\W_]+", value, flags=re.UNICODE) if term]
-
-
-def _audit_term_conditions(term: str):
-    """Return every audit/remediation field in which one word may appear."""
-
-    pattern = _audit_contains_pattern(term)
-    conditions = [
-        cast(AuditLog.event_timestamp, String).ilike(pattern, escape="\\"),
-        AuditLog.event_type.ilike(pattern, escape="\\"),
-        AuditLog.incident_type.ilike(pattern, escape="\\"),
-        AuditLog.action_type.ilike(pattern, escape="\\"),
-        AuditLog.result_status.ilike(pattern, escape="\\"),
-        AuditLog.equipment_name.ilike(pattern, escape="\\"),
-        AuditLog.equipment_ip.ilike(pattern, escape="\\"),
-        cast(AuditLog.port_index, String).ilike(pattern, escape="\\"),
-        AuditLog.target_ip.ilike(pattern, escape="\\"),
-        AuditLog.target_mac.ilike(pattern, escape="\\"),
-        AuditLog.message.ilike(pattern, escape="\\"),
-        Administrator.system_username.ilike(pattern, escape="\\"),
-        AuditLog.incident.has(
-            or_(
-                Incident.incident_type.ilike(pattern, escape="\\"),
-                Incident.description.ilike(pattern, escape="\\"),
-            )
-        ),
-        AuditLog.remediation.has(
-            or_(
-                Remediation.action_type.ilike(pattern, escape="\\"),
-                Remediation.status.ilike(pattern, escape="\\"),
-                cast(Remediation.port_index, String).ilike(pattern, escape="\\"),
-                Remediation.switch_port.has(
-                    SwitchPort.network_switch.has(
-                        NetworkSwitch.name.ilike(pattern, escape="\\")
-                    )
-                ),
-            )
-        ),
-    ]
-    if term.casefold() in "system":
-        conditions.append(AuditLog.administrator_id.is_(None))
-    return conditions
+REASON_LABELS = {
+    "target_is_whitelisted": "Protected port",
+    "explicit_admin_approval_required": "Administrator approval required",
+    "quarantine_vlan_precondition_failed": (
+        "Quarantine VLAN unavailable or not isolated"
+    ),
+    "target_not_confirmed": "Network target could not be confirmed",
+    "playbook_forbids_network_change": (
+        "No network remediation allowed by playbook"
+    ),
+}
 
 
-def _filtered_audit_statement(
-    *,
-    date_value: str = "",
-    search: str = "",
-):
-    """Build a period filter plus a free multi-field, multi-word search."""
+@dataclass(frozen=True)
+class HistoryRecord:
+    incident: Incident | None
+    remediation: Remediation | None
+    audit: AuditLog | None
+    logs: tuple[AuditLog, ...]
 
-    statement = db.select(AuditLog).order_by(AuditLog.event_timestamp.desc())
-    if date_value:
-        start, end = _audit_period_bounds(date_value)
-        statement = statement.where(
-            AuditLog.event_timestamp >= start,
-            AuditLog.event_timestamp < end,
+
+def _aware_utc(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _history_audit(logs: tuple[AuditLog, ...]) -> AuditLog | None:
+    with_result = [entry for entry in logs if entry.result_status]
+    candidates = with_result or list(logs)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda entry: _aware_utc(entry.event_timestamp))
+
+
+def _history_records() -> list[HistoryRecord]:
+    incidents = list(
+        db.session.execute(
+            db.select(Incident).order_by(Incident.detected_at.desc())
+        ).scalars()
+    )
+    records: list[HistoryRecord] = []
+    attached_log_ids: set[str] = set()
+
+    for incident in incidents:
+        incident_logs = tuple(incident.audit_logs)
+        attached_log_ids.update(entry.log_id for entry in incident_logs)
+        remediations = sorted(
+            incident.remediations,
+            key=lambda item: _aware_utc(item.start_time),
         )
-    terms = _audit_search_terms(search)
-    if terms:
-        statement = statement.outerjoin(AuditLog.administrator)
-        for term in terms:
-            statement = statement.where(or_(*_audit_term_conditions(term)))
-    return statement
+        if not remediations:
+            records.append(
+                HistoryRecord(
+                    incident=incident,
+                    remediation=None,
+                    audit=_history_audit(incident_logs),
+                    logs=incident_logs,
+                )
+            )
+            continue
+
+        generic_logs = tuple(
+            entry for entry in incident_logs if entry.remediation_id is None
+        )
+        for remediation in remediations:
+            remediation_logs = tuple(
+                entry
+                for entry in incident_logs
+                if entry.remediation_id == remediation.remediation_id
+            )
+            context_logs = (*generic_logs, *remediation_logs)
+            records.append(
+                HistoryRecord(
+                    incident=incident,
+                    remediation=remediation,
+                    audit=_history_audit(remediation_logs or context_logs),
+                    logs=context_logs,
+                )
+            )
+
+    all_logs = list(
+        db.session.execute(
+            db.select(AuditLog).order_by(AuditLog.event_timestamp.desc())
+        ).scalars()
+    )
+    for entry in all_logs:
+        if entry.log_id in attached_log_ids:
+            continue
+        records.append(
+            HistoryRecord(
+                incident=entry.incident,
+                remediation=entry.remediation,
+                audit=entry,
+                logs=(entry,),
+            )
+        )
+
+    return sorted(records, key=_history_timestamp, reverse=True)
 
 
-def _audit_action(entry: AuditLog) -> str:
-    if entry.action_type:
-        return entry.action_type
-    if entry.remediation:
-        return entry.remediation.action_type
-    return "Not available"
+def _history_timestamp(record: HistoryRecord) -> datetime:
+    if record.incident and record.incident.detected_at:
+        return _aware_utc(record.incident.detected_at)
+    if record.audit:
+        return _aware_utc(record.audit.event_timestamp)
+    if record.remediation:
+        return _aware_utc(record.remediation.start_time)
+    return _aware_utc(None)
 
 
-def _audit_result(entry: AuditLog) -> str:
-    if entry.remediation:
-        return entry.remediation.status
-    if entry.result_status:
-        return entry.result_status
+def _history_incident_type(record: HistoryRecord) -> str:
+    if record.incident and record.incident.incident_type:
+        return record.incident.incident_type
+    if record.audit and record.audit.incident_type:
+        return record.audit.incident_type
+    return "Unknown incident"
+
+
+def _history_action(record: HistoryRecord) -> str:
+    technical = None
+    if record.audit and record.audit.action_type:
+        technical = record.audit.action_type
+    elif record.remediation:
+        technical = record.remediation.action_type
+    return technical or "NO_ACTION"
+
+
+def _history_action_label(record: HistoryRecord) -> str:
+    technical = _history_action(record)
+    return ACTION_LABELS.get(technical, technical.replace("_", " ").title())
+
+
+def _history_mode(record: HistoryRecord) -> str:
+    if record.remediation:
+        return record.remediation.authorization_mode
+    return "NONE"
+
+
+def _history_result(record: HistoryRecord) -> str:
+    if record.audit and record.audit.result_status:
+        return record.audit.result_status
+    if record.remediation:
+        return record.remediation.status
+    if record.incident:
+        return record.incident.processing_status
     return "INFO"
 
 
-def _audit_switch_name(entry: AuditLog) -> str:
-    if entry.equipment_name:
-        return entry.equipment_name
-    if entry.remediation and entry.remediation.switch_port:
-        return entry.remediation.switch_port.network_switch.name
+def _history_switch_name(record: HistoryRecord) -> str:
+    if record.remediation and record.remediation.switch_port:
+        return record.remediation.switch_port.network_switch.name
+    entries = sorted(
+        record.logs,
+        key=lambda entry: _aware_utc(entry.event_timestamp),
+        reverse=True,
+    )
+    for entry in entries:
+        if entry.equipment_name:
+            return entry.equipment_name
     return "Not available"
 
 
-def _audit_port(entry: AuditLog) -> str:
-    if entry.port_index is not None:
-        return str(entry.port_index)
-    if entry.remediation and entry.remediation.port_index is not None:
-        return str(entry.remediation.port_index)
-    return "Not available"
+def _history_port_index(record: HistoryRecord) -> int | None:
+    if record.remediation and record.remediation.port_index is not None:
+        return record.remediation.port_index
+    for entry in record.logs:
+        if entry.port_index is not None:
+            return entry.port_index
+    return None
 
 
-def _audit_administrator(entry: AuditLog) -> str:
-    if entry.administrator:
-        return entry.administrator.system_username
+def _history_port_name(record: HistoryRecord) -> str:
+    if record.remediation and record.remediation.switch_port:
+        port = record.remediation.switch_port
+        if port.port_name:
+            return port.port_name
+    index = _history_port_index(record)
+    return f"Index {index}" if index is not None else "Not available"
+
+
+def _history_administrator(record: HistoryRecord) -> str:
+    relevant = sorted(
+        record.logs,
+        key=lambda entry: _aware_utc(entry.event_timestamp),
+        reverse=True,
+    )
+    for entry in relevant:
+        if entry.administrator:
+            return entry.administrator.system_username
     return "SYSTEM"
 
 
-def _display_audit_entries(entries: list[AuditLog]) -> None:
-    count = len(entries)
+def _history_actor_line(record: HistoryRecord) -> str:
+    result = _history_result(record)
+    username = _history_administrator(record)
+    if record.remediation and record.remediation.authorization_mode == "AUTOMATIC":
+        return "Performed by   : SYSTEM"
+    if result == "REJECTED_BY_ADMIN":
+        return f"Rejected by    : {username}"
+    if "ROLLBACK" in result or any(
+        "ROLLBACK" in entry.event_type for entry in record.logs
+    ):
+        return f"Requested by   : {username}"
+    if record.remediation and record.remediation.authorization_mode == "SUPERVISED":
+        return f"Approved by    : {username}"
+    return f"Performed by   : {username}"
+
+
+def _audit_reason(entry: AuditLog) -> str | None:
+    if " | " not in entry.message:
+        return None
+    raw_details = entry.message.split(" | ", 1)[1]
+    try:
+        details = json.loads(raw_details)
+    except (TypeError, ValueError):
+        return None
+    reason = details.get("reason") if isinstance(details, dict) else None
+    return str(reason) if reason else None
+
+
+def _history_reason(record: HistoryRecord) -> str | None:
+    entries = sorted(
+        record.logs,
+        key=lambda entry: _aware_utc(entry.event_timestamp),
+        reverse=True,
+    )
+    for entry in entries:
+        reason = _audit_reason(entry)
+        if reason:
+            return REASON_LABELS.get(reason, "Not available")
+    return None
+
+
+def _display_history(records: list[HistoryRecord]) -> None:
+    count = len(records)
     label = "entry" if count == 1 else "entries"
-    click.echo(f"\nOKAPI - AUDIT LOGS ({count} {label})")
-    click.echo("=" * 56)
-    for index, entry in enumerate(entries, start=1):
-        click.echo(
-            f"[{index}/{count}]\n"
-            f"Date / time   : {local_time(entry.event_timestamp)}\n"
-            f"Event         : {entry.event_type}\n"
-            f"Action        : {_audit_action(entry)}\n"
-            f"Result        : {_audit_result(entry)}\n"
-            f"Administrator : {_audit_administrator(entry)}\n"
-            f"Switch        : {_audit_switch_name(entry)}\n"
-            f"Port          : {_audit_port(entry)}"
-        )
+    click.echo(f"\nOKAPI - INCIDENT & ACTION HISTORY ({count} {label})")
+    click.echo("=" * 64)
+    for index, record in enumerate(records, start=1):
+        incident = record.incident
+        reason = _history_reason(record)
+        lines = [
+            f"[{index}/{count}]",
+            "",
+            f"Incident       : {_history_incident_type(record)}",
+            f"Detected       : {local_time(_history_timestamp(record))}",
+            f"Severity       : {incident.severity if incident and incident.severity else 'Not available'}",
+            f"Playbook       : {incident.playbook_id if incident else 'Not available'}",
+            "",
+            f"Switch         : {_history_switch_name(record)}",
+            f"Port           : {_history_port_name(record)}",
+            "",
+            f"Remediation    : {_history_action_label(record)}",
+            f"Mode           : {_history_mode(record)}",
+            f"Result         : {_history_result(record)}",
+            _history_actor_line(record),
+        ]
+        if reason:
+            lines.append(f"Reason         : {reason}")
+        if _history_mode(record) == "NONE" or _history_action(record) == "NO_ACTION":
+            lines.append("Network change : NONE")
+        click.echo("\n".join(lines))
         if index != count:
-            click.echo("-" * 56)
+            click.echo("-" * 64)
+
+
+def _search_terms(value: str) -> list[str]:
+    return [term.casefold() for term in re.split(r"[\W_]+", value) if term]
+
+
+def _matches_text(value: str, query: str) -> bool:
+    searchable = value.casefold().replace("_", " ")
+    return all(term in searchable for term in _search_terms(query))
+
+
+def _history_filter_options(
+    records: list[HistoryRecord],
+    value_getter,
+) -> list[str]:
+    return sorted(
+        {value_getter(record) for record in records if value_getter(record)},
+        key=str.casefold,
+    )
+
+
+def _prompt_history_filter(
+    label: str,
+    options: list[str],
+    *,
+    display_getter=lambda value: value,
+) -> str | None:
+    click.echo(f"\n{label}:")
+    click.echo("[0] Any")
+    for index, value in enumerate(options, start=1):
+        click.echo(f"[{index}] {display_getter(value)}")
+    raw = click.prompt(
+        "Select a number or type partial information",
+        default="0",
+    ).strip()
+    if not raw or raw.casefold() == "any" or raw == "0":
+        return None
+    if raw.isdigit():
+        selected = int(raw)
+        if selected < 1 or selected > len(options):
+            raise ValueError("Invalid filter selection.")
+        return options[selected - 1]
+    return raw
+
+
+def _port_matches(record: HistoryRecord, query: str) -> bool:
+    normalized = query.strip().casefold()
+    index_match = re.fullmatch(r"(?:ethernet|et)?\s*(\d+)", normalized)
+    if index_match:
+        index = _history_port_index(record)
+        return index is not None and index == int(index_match.group(1))
+    return _matches_text(_history_port_name(record), query)
+
+
+def _history_search_text(record: HistoryRecord) -> str:
+    incident = record.incident
+    values = [
+        _history_incident_type(record),
+        incident.description if incident and incident.description else "",
+        incident.playbook_id if incident else "",
+        incident.severity if incident and incident.severity else "",
+        _history_switch_name(record),
+        _history_port_name(record),
+        str(_history_port_index(record) or ""),
+        _history_action(record),
+        _history_action_label(record),
+        _history_mode(record),
+        _history_result(record),
+        _history_administrator(record),
+        _history_reason(record) or "",
+        *[entry.message for entry in record.logs],
+    ]
+    return " ".join(values)
+
+
+def _filter_history_records(
+    records: list[HistoryRecord],
+    *,
+    date_value: str = "",
+    incident: str | None = None,
+    switch: str | None = None,
+    port: str = "",
+    remediation: str | None = None,
+    mode: str | None = None,
+    result: str | None = None,
+    administrator: str = "",
+    search: str = "",
+) -> list[HistoryRecord]:
+    start = end = None
+    if date_value:
+        start, end = _audit_period_bounds(date_value)
+
+    matches: list[HistoryRecord] = []
+    for record in records:
+        timestamp = _history_timestamp(record)
+        if start is not None and end is not None and not (start <= timestamp < end):
+            continue
+        if incident and not _matches_text(_history_incident_type(record), incident):
+            continue
+        if switch and not _matches_text(_history_switch_name(record), switch):
+            continue
+        if port and not _port_matches(record, port):
+            continue
+        if remediation and not (
+            _matches_text(_history_action(record), remediation)
+            or _matches_text(_history_action_label(record), remediation)
+        ):
+            continue
+        if mode and not _matches_text(_history_mode(record), mode):
+            continue
+        if result and not _matches_text(_history_result(record), result):
+            continue
+        if administrator and not _matches_text(
+            _history_administrator(record), administrator
+        ):
+            continue
+        if search and not _matches_text(_history_search_text(record), search):
+            continue
+        matches.append(record)
+    return matches
+
+
+def _guided_history_filters(records: list[HistoryRecord]) -> list[HistoryRecord]:
+    incident = _prompt_history_filter(
+        "Filter by incident",
+        _history_filter_options(records, _history_incident_type),
+    )
+    date_value = click.prompt(
+        "Date / period (YYYY, YYYY-MM, or YYYY-MM-DD; blank = any)",
+        default="",
+        show_default=False,
+    ).strip()
+    switch = _prompt_history_filter(
+        "Filter by switch",
+        _history_filter_options(records, _history_switch_name),
+    )
+    port = click.prompt(
+        "Port (Ethernet1, Et1 or 1; blank = any)",
+        default="",
+        show_default=False,
+    ).strip()
+    remediation = _prompt_history_filter(
+        "Filter by remediation",
+        _history_filter_options(records, _history_action),
+        display_getter=lambda value: ACTION_LABELS.get(value, value),
+    )
+    mode = _prompt_history_filter(
+        "Filter by mode",
+        _history_filter_options(records, _history_mode),
+    )
+    result = _prompt_history_filter(
+        "Filter by result",
+        _history_filter_options(records, _history_result),
+    )
+    administrator = click.prompt(
+        "Administrator (blank = any)",
+        default="",
+        show_default=False,
+    ).strip()
+    search = click.prompt(
+        "Additional information (word or phrase; blank = any)",
+        default="",
+        show_default=False,
+    ).strip()
+    return _filter_history_records(
+        records,
+        date_value=date_value,
+        incident=incident,
+        switch=switch,
+        port=port,
+        remediation=remediation,
+        mode=mode,
+        result=result,
+        administrator=administrator,
+        search=search,
+    )
 
 
 def _logs() -> None:
-    mode = click.prompt("[1] Latest logs [2] Filter logs [B] Back", default="1").strip().upper()
+    mode = click.prompt(
+        "[1] Latest history [2] Filter history [B] Back",
+        default="1",
+    ).strip().upper()
     if mode == "B":
         return
-    statement = db.select(AuditLog).order_by(AuditLog.event_timestamp.desc())
-    if mode == "2":
-        date_value = click.prompt(
-            "Date / period (YYYY, YYYY-MM, or YYYY-MM-DD; blank = any)",
-            default="",
-            show_default=False,
-        ).strip()
-        search = click.prompt(
-            "Search word or phrase (blank = any)",
-            default="",
-            show_default=False,
-        ).strip()
-        try:
-            statement = _filtered_audit_statement(
-                date_value=date_value,
-                search=search,
-            )
-        except ValueError as exc:
-            click.echo(str(exc))
+    records = _history_records()
+    try:
+        if mode == "2":
+            records = _guided_history_filters(records)
+        elif mode == "1":
+            records = records[:20]
+        else:
+            click.echo("Invalid selection.")
             return
-    if mode != "2":
-        statement = statement.limit(20)
-    entries = list(db.session.execute(statement).scalars())
-    if not entries:
-        click.echo("No audit logs found.")
+    except ValueError as exc:
+        click.echo(str(exc))
         return
-    _display_audit_entries(entries)
+    if not records:
+        click.echo("No history found.")
+        return
+    _display_history(records)
 
 
 def _actor_label(entry: AuditLog | None) -> str:
@@ -723,7 +1031,7 @@ def okapi(
         click.echo(
             "[1] Pending incidents [2] All incidents [3] Incident details "
             "[4] Approve remediation [5] Reject remediation "
-            "[6] Remediation history [7] Audit logs [8] Rollback "
+            "[6] Remediation history [7] Incident & action history [8] Rollback "
             "[9] Dry-run mode [10] System status [L] Logout / Exit"
         )
         choice = click.prompt("Select", default="", show_default=False).strip().upper()

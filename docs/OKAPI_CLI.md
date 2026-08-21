@@ -30,7 +30,7 @@ Incident details
 Approve remediation
 Reject remediation
 Remediation history
-Audit logs
+Incident & action history
 Rollback
 Dry-run mode
 System status
@@ -42,8 +42,8 @@ disabling dry-run invoke `sudo -k` followed by `sudo -v`. The password exchange
 is performed by the system PAM stack directly in the terminal and is never
 read by OKAPI. Failure is audited and the action is refused.
 
-Audit and remediation history display `Approved by : <username>` for
-supervised actions and `Executed by : SYSTEM` for automatic actions. Dry-run
+Incident/action and remediation history display `Approved by : <username>` for
+supervised actions and `Performed by : SYSTEM` for automatic actions. Dry-run
 changes persist in the ignored local runtime
 settings file and System status always displays the effective ON/OFF value.
 
@@ -51,35 +51,36 @@ The complete specification for authorization modes, executor identity,
 dynamic VLAN/interface rollback, Available Rollbacks filtering and audit
 events is in [REMEDIATION_ROLLBACK_CHANGES.md](REMEDIATION_ROLLBACK_CHANGES.md).
 
-## Audit log filters
+## Incident and action history filters
 
-`Audit logs > Filter logs` accepts these independent optional fields:
+The submenu is exactly:
 
 ```text
-Date / period (YYYY, YYYY-MM, or YYYY-MM-DD; blank = any)
-Search word or phrase (blank = any)
+[1] Latest history [2] Filter history [B] Back
 ```
 
+`Filter history` guides the administrator through incident, date/period,
+switch, port, remediation, mode, result, administrator and an optional free
+word/phrase. Every category offers `[0] Any` (or a blank value for free-text
+fields). Choosing `Any` only skips that category: OKAPI continues asking for
+the remaining filters, so one small piece of information is sufficient.
+
+The values offered for incident, switch, remediation, mode and result are built
+from the history currently stored in the database. A partial value may also be
+typed instead of a menu number. Ports accept `Ethernet1`, `Et1` or `1` when the
+index is known.
+
 The date is progressive: `2026` selects the whole year, `2026-08` the whole
-month and `2026-08-20` the complete local day in `Africa/Kinshasa`. OKAPI
-converts those local bounds to UTC before querying `event_timestamp`.
+month and `2026-08-20` the complete local day in `Africa/Kinshasa`.
 
-The second field is a case-insensitive free search across the complete useful
-context: date, event, incident type/description, action, result, administrator,
-switch, equipment/target addresses, port and audit message. It also searches
-the linked remediation and inventory when an older audit row does not repeat
-all that context. A phrase is split into words, so `VLAN policy` matches a
-stored value such as `VLAN_POLICY_VIOLATION`, and `port flapping` matches
-`port_flapping`. Every word must be present somewhere in the same audit
-context; the words do not have to belong to the same database column. A blank
-search returns every entry in the selected period.
+The optional final phrase searches the complete business context. Spaces and
+underscores are treated consistently, so `VLAN policy` can match
+`VLAN_POLICY_VIOLATION`, and `port flapping` can match `port_flapping`.
 
-Filtered searches return all matches. `Latest logs` remains unchanged and
-continues to select the latest 20 entries. Both modes render each entry as a
-readable audit card containing date/time, action, result, administrator, switch
-and port. When a remediation is linked, `Result` shows its final status. When an
-older audit row does not duplicate its switch, port or action, OKAPI obtains
-that context from the linked remediation record.
+The display groups technical audit events by incident/remediation. It presents
+incident, detection time, severity, playbook, switch, port, readable
+remediation, mode, historical result and actor. Internal event names remain in
+the database but are not shown in the administrator history.
 
 For maintenance, `flask --app run.py incidents list --from "2026-01-08 16:00"
 --to "2026-01-08 17:00"` and `incidents logs` support local-time filters.

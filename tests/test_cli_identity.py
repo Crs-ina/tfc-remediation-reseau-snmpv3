@@ -19,7 +19,7 @@ def test_okapi_uses_linux_identity_and_final_english_menu(app, monkeypatch) -> N
         "Approve remediation",
         "Reject remediation",
         "Remediation history",
-        "Audit logs",
+        "Incident & action history",
         "Rollback",
         "Dry-run mode",
         "System status",

@@ -222,7 +222,7 @@ SNMP writes              : BLOCKED BY DRY-RUN
 4   Approve remediation
 5   Reject remediation
 6   Remediation history
-7   Audit logs
+7   Incident & action history
 8   Rollback
 9   Dry-run mode
 10  System status

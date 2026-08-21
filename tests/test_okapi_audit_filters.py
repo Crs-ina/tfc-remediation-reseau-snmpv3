@@ -63,10 +63,30 @@ def _run_filter(
     monkeypatch,
     capsys,
     *,
+    incident: str = "0",
     date: str = "",
+    switch: str = "0",
+    port: str = "",
+    remediation: str = "0",
+    mode: str = "0",
+    result: str = "0",
+    administrator: str = "",
     search: str = "",
 ) -> str:
-    answers = iter(["2", date, search])
+    answers = iter(
+        [
+            "2",
+            incident,
+            date,
+            switch,
+            port,
+            remediation,
+            mode,
+            result,
+            administrator,
+            search,
+        ]
+    )
     monkeypatch.setattr("click.prompt", lambda *_args, **_kwargs: next(answers))
     with app.app_context():
         _logs()
@@ -82,8 +102,9 @@ def test_free_search_matches_incident_related_fields(
         capsys,
         search="vLaN policy",
     )
-    assert "VLAN_HUMAN_EVENT" in output
-    assert "SHUTDOWN_SYSTEM_EVENT" not in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" in output
+    assert "Remediation    : Quarantine VLAN" in output
+    assert "Incident       : network_loop" not in output
 
 
 def test_action_and_result_filters_accept_partial_values(
@@ -95,9 +116,9 @@ def test_action_and_result_filters_accept_partial_values(
         capsys,
         search="ShUt",
     )
-    assert "SHUTDOWN_SYSTEM_EVENT" in action_output
-    assert "NEXT_LOCAL_DAY_EVENT" in action_output
-    assert "VLAN_HUMAN_EVENT" not in action_output
+    assert "Incident       : network_loop" in action_output
+    assert "Incident       : port_flapping" in action_output
+    assert "Incident       : VLAN_POLICY_VIOLATION" not in action_output
 
     result_output = _run_filter(
         audit_log_dataset,
@@ -105,8 +126,8 @@ def test_action_and_result_filters_accept_partial_values(
         capsys,
         search="fail",
     )
-    assert "NEXT_LOCAL_DAY_EVENT" in result_output
-    assert "SHUTDOWN_SYSTEM_EVENT" not in result_output
+    assert "Incident       : port_flapping" in result_output
+    assert "Incident       : network_loop" not in result_output
 
 
 def test_one_letter_and_switch_name_filters_work_independently(
@@ -118,8 +139,8 @@ def test_one_letter_and_switch_name_filters_work_independently(
         capsys,
         search="q",
     )
-    assert "VLAN_HUMAN_EVENT" in one_letter
-    assert "SHUTDOWN_SYSTEM_EVENT" not in one_letter
+    assert "Incident       : VLAN_POLICY_VIOLATION" in one_letter
+    assert "Incident       : network_loop" not in one_letter
 
     switch_output = _run_filter(
         audit_log_dataset,
@@ -127,9 +148,9 @@ def test_one_letter_and_switch_name_filters_work_independently(
         capsys,
         search="aris",
     )
-    assert "VLAN_HUMAN_EVENT" in switch_output
-    assert "SHUTDOWN_SYSTEM_EVENT" in switch_output
-    assert "NEXT_LOCAL_DAY_EVENT" not in switch_output
+    assert "Incident       : VLAN_POLICY_VIOLATION" in switch_output
+    assert "Incident       : network_loop" in switch_output
+    assert "Incident       : port_flapping" not in switch_output
 
 
 def test_free_search_is_not_fixed_to_one_field(
@@ -141,9 +162,9 @@ def test_free_search_is_not_fixed_to_one_field(
         capsys,
         search="arista",
     )
-    assert "VLAN_HUMAN_EVENT" in output
-    assert "SHUTDOWN_SYSTEM_EVENT" in output
-    assert "NEXT_LOCAL_DAY_EVENT" not in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" in output
+    assert "Incident       : network_loop" in output
+    assert "Incident       : port_flapping" not in output
 
 
 def test_administrator_name_is_partial_and_case_insensitive(
@@ -155,9 +176,9 @@ def test_administrator_name_is_partial_and_case_insensitive(
         capsys,
         search="ExAu",
     )
-    assert "VLAN_HUMAN_EVENT" in output
-    assert "NEXT_LOCAL_DAY_EVENT" in output
-    assert "SHUTDOWN_SYSTEM_EVENT" not in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" in output
+    assert "Incident       : port_flapping" in output
+    assert "Incident       : network_loop" not in output
 
 
 @pytest.mark.parametrize("search", ["sys", "SYSTEM", "system"])
@@ -170,8 +191,8 @@ def test_system_is_available_through_partial_administrator_search(
         capsys,
         search=search,
     )
-    assert "SHUTDOWN_SYSTEM_EVENT" in output
-    assert "VLAN_HUMAN_EVENT" not in output
+    assert "Incident       : network_loop" in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" not in output
 
 
 def test_date_filter_uses_the_africa_kinshasa_calendar_day(
@@ -183,9 +204,9 @@ def test_date_filter_uses_the_africa_kinshasa_calendar_day(
         capsys,
         date="2026-08-20",
     )
-    assert "VLAN_HUMAN_EVENT" in output
-    assert "SHUTDOWN_SYSTEM_EVENT" in output
-    assert "NEXT_LOCAL_DAY_EVENT" not in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" in output
+    assert "Incident       : network_loop" in output
+    assert "Incident       : port_flapping" not in output
 
 
 @pytest.mark.parametrize("period", ["2026", "2026-08"])
@@ -198,9 +219,9 @@ def test_date_filter_accepts_a_year_or_month(
         capsys,
         date=period,
     )
-    assert "VLAN_HUMAN_EVENT" in output
-    assert "SHUTDOWN_SYSTEM_EVENT" in output
-    assert "NEXT_LOCAL_DAY_EVENT" in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" in output
+    assert "Incident       : network_loop" in output
+    assert "Incident       : port_flapping" in output
 
 
 def test_period_and_free_search_are_combined_and_phrase_words_are_flexible(
@@ -213,9 +234,9 @@ def test_period_and_free_search_are_combined_and_phrase_words_are_flexible(
         date="2026-08-20",
         search="shut arista",
     )
-    assert "SHUTDOWN_SYSTEM_EVENT" in output
-    assert "VLAN_HUMAN_EVENT" not in output
-    assert "NEXT_LOCAL_DAY_EVENT" not in output
+    assert "Incident       : network_loop" in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" not in output
+    assert "Incident       : port_flapping" not in output
 
 
 def test_filtered_results_are_not_limited_to_the_latest_twenty(
@@ -244,8 +265,9 @@ def test_filtered_results_are_not_limited_to_the_latest_twenty(
         capsys,
         date="2026-08-22",
     )
-    assert "BULK_EVENT_00" in output
-    assert "BULK_EVENT_20" in output
+    assert "OKAPI - INCIDENT & ACTION HISTORY (21 entries)" in output
+    assert "[21/21]" in output
+    assert "BULK_EVENT_00" not in output
 
 
 def test_port_flapping_phrase_and_latest_logs_are_supported(
@@ -257,9 +279,9 @@ def test_port_flapping_phrase_and_latest_logs_are_supported(
         capsys,
         search="port flapping",
     )
-    assert "NEXT_LOCAL_DAY_EVENT" in port_output
-    assert "SHUTDOWN_SYSTEM_EVENT" not in port_output
-    assert "VLAN_HUMAN_EVENT" not in port_output
+    assert "Incident       : port_flapping" in port_output
+    assert "Incident       : network_loop" not in port_output
+    assert "Incident       : VLAN_POLICY_VIOLATION" not in port_output
 
     word_output = _run_filter(
         audit_log_dataset,
@@ -267,16 +289,71 @@ def test_port_flapping_phrase_and_latest_logs_are_supported(
         capsys,
         search="port",
     )
-    assert "NEXT_LOCAL_DAY_EVENT" in word_output
+    assert "Incident       : port_flapping" in word_output
 
     answers = iter(["1"])
     monkeypatch.setattr("click.prompt", lambda *_args, **_kwargs: next(answers))
     with audit_log_dataset.app_context():
         _logs()
     latest_output = capsys.readouterr().out
-    assert "VLAN_HUMAN_EVENT" in latest_output
-    assert "SHUTDOWN_SYSTEM_EVENT" in latest_output
-    assert "NEXT_LOCAL_DAY_EVENT" in latest_output
+    assert "Incident       : VLAN_POLICY_VIOLATION" in latest_output
+    assert "Incident       : network_loop" in latest_output
+    assert "Incident       : port_flapping" in latest_output
+    assert "Event         :" not in latest_output
+
+
+def test_submenu_uses_filter_history_without_search_wording(
+    audit_log_dataset, monkeypatch
+):
+    prompts: list[str] = []
+
+    def answer(prompt, *_args, **_kwargs):
+        prompts.append(prompt)
+        return "B"
+
+    monkeypatch.setattr("click.prompt", answer)
+    with audit_log_dataset.app_context():
+        _logs()
+
+    assert prompts[0] == "[1] Latest history [2] Filter history [B] Back"
+    assert "Search / filter history" not in prompts[0]
+
+
+def test_any_keeps_filtering_and_one_small_port_hint_is_enough(
+    audit_log_dataset, monkeypatch, capsys
+):
+    output = _run_filter(
+        audit_log_dataset,
+        monkeypatch,
+        capsys,
+        port="Et4",
+    )
+
+    assert "Incident       : port_flapping" in output
+    assert "Incident       : network_loop" not in output
+    assert "Incident       : VLAN_POLICY_VIOLATION" not in output
+
+
+def test_guided_filters_accept_partial_information_and_combine(
+    audit_log_dataset, monkeypatch, capsys
+):
+    output = _run_filter(
+        audit_log_dataset,
+        monkeypatch,
+        capsys,
+        incident="flap",
+        date="2026-08",
+        switch="cisco",
+        port="4",
+        remediation="shutdown",
+        mode="none",
+        result="fail",
+        administrator="ex",
+    )
+
+    assert "OKAPI - INCIDENT & ACTION HISTORY (1 entry)" in output
+    assert "Incident       : port_flapping" in output
+    assert "Result         : FAILED" in output
 
 
 @pytest.mark.parametrize(
