@@ -30,7 +30,48 @@ class SystemIdentity:
 
 
 def current_system_identity() -> SystemIdentity:
-    """Resolve the real Linux administrator who launched OKAPI."""
+    """Resolve the account running ``okapi`` without asking for credentials."""
+
+    display_name: str | None = None
+    if os.name == "posix":
+        try:
+            import pwd
+
+            original_username = os.environ.get("OKAPI_CALLER")
+
+            if original_username:
+                account = pwd.getpwnam(original_username)
+            else:
+                account = pwd.getpwuid(os.geteuid())
+
+            username = account.pw_name
+            gecos_name = account.pw_gecos.split(",", maxsplit=1)[0].strip()
+            display_name = gecos_name or None
+
+        except (ImportError, KeyError, OSError) as exc:
+            raise IdentityError(
+                "Unable to resolve the current Linux account."
+            ) from exc
+    else:
+        username = getpass.getuser()        try:
+            import pwd
+
+            account = pwd.getpwuid(os.geteuid())
+            username = account.pw_name
+            gecos_name = account.pw_gecos.split(",", maxsplit=1)[0].strip()
+            display_name = gecos_name or None
+        except (ImportError, KeyError, OSError) as exc:
+            raise IdentityError("Unable to resolve the current Linux account.") from exc
+    else:
+        username = getpass.getuser()
+
+    normalized = username.strip()
+    if not normalized or len(normalized) > 128:
+        raise IdentityError("The operating-system username is missing or invalid.")
+    return SystemIdentity(normalized, display_name)
+
+def current_system_identity() -> SystemIdentity:
+    """Resolve the real administrator who launched OKAPI."""
 
     display_name: str | None = None
 
@@ -68,8 +109,6 @@ def current_system_identity() -> SystemIdentity:
         system_username=normalized,
         display_name=display_name,
     )
-
-
 def resolve_current_administrator(
     identity: SystemIdentity | None = None,
 ) -> Administrator:
