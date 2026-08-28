@@ -9,6 +9,7 @@ BUILD_ARCHITECTURE="$(dpkg --print-architecture)"
 OUTPUT_DIR="${OKAPI_OUTPUT_DIR:-$PROJECT_DIR/dist}"
 BUILD_DIR="$(mktemp -d)"
 PACKAGE_ROOT="$BUILD_DIR/okapi_${VERSION}_${ARCHITECTURE}"
+PIP_ZIPAPP="$BUILD_DIR/pip.pyz"
 
 cleanup() {
     rm -rf -- "$BUILD_DIR"
@@ -27,6 +28,23 @@ for command in dpkg-deb python3; do
         exit 1
     }
 done
+
+# Do not require a system-wide python3-pip package. If pip is unavailable,
+# bootstrap the official pip zipapp temporarily inside the build directory.
+if python3 -m pip --version >/dev/null 2>&1; then
+    PIP_CMD=(python3 -m pip)
+else
+    echo "System pip not found; using temporary pip zipapp for the build."
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL https://bootstrap.pypa.io/pip/pip.pyz -o "$PIP_ZIPAPP"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q https://bootstrap.pypa.io/pip/pip.pyz -O "$PIP_ZIPAPP"
+    else
+        echo "Missing build command: curl or wget is required to bootstrap pip temporarily." >&2
+        exit 1
+    fi
+    PIP_CMD=(python3 "$PIP_ZIPAPP")
+fi
 
 install -d "$PACKAGE_ROOT/DEBIAN"
 install -d "$PACKAGE_ROOT/opt/okapi/bin" "$PACKAGE_ROOT/opt/okapi/wheels"
@@ -71,7 +89,7 @@ install -m 0644 "$SCRIPT_DIR/DEBIAN/conffiles" "$PACKAGE_ROOT/DEBIAN/conffiles"
 sed "s/@ARCHITECTURE@/$ARCHITECTURE/g" "$SCRIPT_DIR/DEBIAN/control.in" \
     > "$PACKAGE_ROOT/DEBIAN/control"
 
-python3 -m pip download \
+"${PIP_CMD[@]}" download \
     --disable-pip-version-check \
     --only-binary=:all: \
     --dest "$PACKAGE_ROOT/opt/okapi/wheels" \
