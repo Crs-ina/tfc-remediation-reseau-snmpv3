@@ -12,6 +12,7 @@ fi
 
 install -d -m 2770 -o okapi -g okapi /var/lib/okapi
 install -d -m 2770 -o okapi -g okapi /var/lib/okapi/port-locks
+install -d -m 0700 -o root -g root /var/backups/okapi
 
 if [ ! -e /etc/okapi/secrets.env ]; then
     install -m 0640 -o root -g okapi /dev/null /etc/okapi/secrets.env

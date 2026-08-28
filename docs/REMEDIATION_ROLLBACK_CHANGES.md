@@ -90,21 +90,28 @@ par une autre constante.
 
 ## 5. Rollback de l’état administratif
 
-Le même principe s’applique à `ifAdminStatus` : l’état précédent est lu et
-enregistré avant l’action, puis l’état appliqué est confirmé par GET.
+Le modèle conserve `previous_port_status` et `applied_port_status`, et le
+dry-run peut représenter la séquence attendue :
 
 ```text
 UP -> SHUTDOWN_PORT -> DOWN -> rollback -> UP
 ```
+
+Cette séquence n’est pas exécutable réellement dans la version actuelle.
+`IF-MIB::ifAdminStatus` reste `TO_BE_VALIDATED`, le service d’exécution bloque
+le chemin réel et la frontière de transport SET n’accepte que
+`Q-BRIDGE-MIB::dot1qPvid`. Par conséquent, ni le shutdown/réactivation ni leur
+rollback n’envoient actuellement de SET `ifAdminStatus`.
 
 Les valeurs SNMP `1` et `2` restent utilisables en interne, mais l’interface
 affiche `UP` et `DOWN` dans `Current state` et `Restore to`.
 
 ## 6. Protection contre une modification externe
 
-Avant tout SET de rollback, OKAPI relit l’état réel sous le verrou du port. Si
-cet état ne correspond plus à l’état appliqué par la remédiation, aucun SET
-n’est envoyé.
+Avant tout SET de rollback VLAN, OKAPI relit l’état réel sous le verrou du port.
+Si cet état ne correspond plus à l’état appliqué par la remédiation, aucun SET
+n’est envoyé. Le même garde-fou existe dans le chemin préparatoire
+`ifAdminStatus`, mais ce chemin reste bloqué avant toute écriture réelle.
 
 Exemple :
 
@@ -189,8 +196,8 @@ Les tests couvrent explicitement :
 
 - restauration des VLAN 10 et 8 après quarantaine dans le VLAN 18 ;
 - absence de SET si le VLAN est passé manuellement à 20 ;
-- restauration `DOWN -> UP` avec libellés lisibles ;
-- blocage après modification externe de `ifAdminStatus` ;
+- rendu dry-run `DOWN -> UP` avec libellés lisibles, sans SET réel ;
+- blocage du chemin réel `ifAdminStatus` avant toute écriture ;
 - identité `SUPERVISED` et identité `AUTOMATIC` ;
 - exclusion de `FAILED` et `RECOVERED_BEFORE_ACTION` des rollbacks ;
 - retrait d’une action déjà rollbackée ;

@@ -34,6 +34,7 @@ def app(tmp_path):
             "SNMP_WRITE_ENABLED": False,
             "DRY_RUN": False,
             "RUNTIME_SETTINGS_PATH": tmp_path / "runtime-settings.json",
+            "SQLITE_BACKUP_DIR": tmp_path / "backups",
             "SNMP_MIB_PACKAGE": "pysnmp_mibs",
             "SNMP_MIB_PATH": None,
             "SNMP_CAPABILITIES_PATH": PROJECT_ROOT

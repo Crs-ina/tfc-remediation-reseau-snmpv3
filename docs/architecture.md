@@ -78,9 +78,11 @@ une demande en attente en approbation.
 
 Outside the supervised window, only `SHUTDOWN_PORT` and `QUARANTINE_VLAN`
 may receive the business mode `AUTOMATIC` from the external calendar.
-`REACTIVATE_PORT` remains always supervised. Every write path still applies target confirmation,
-whitelist, capability, snapshot, cooldown, per-port serialization, at most two
-SET attempts and GET verification.
+`REACTIVATE_PORT` remains always supervised. Business authorization does not
+make `SHUTDOWN_PORT` executable: its `ifAdminStatus` SET is still blocked as
+`TO_BE_VALIDATED`. The only real write path, `dot1qPvid`, applies target
+confirmation, whitelist, capability, snapshot, cooldown, per-port
+serialization, at most two SET attempts and GET verification.
 
 ## Seven playbook routes
 

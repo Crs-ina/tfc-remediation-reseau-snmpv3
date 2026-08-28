@@ -203,13 +203,52 @@ OKAPI utilise l’UID Linux réel du processus pour la traçabilité. Les action
 critiques demandent une réauthentification `sudo`/PAM et les décisions sont
 journalisées sous ce compte.
 
-## 7. Réinstaller sur un autre serveur
+## 7. Sauvegarder et restaurer SQLite
+
+Root peut créer à tout moment une sauvegarde cohérente, sans arrêter OKAPI :
+
+```bash
+sudo okapi-backup
+sudo ls -l /var/backups/okapi/
+```
+
+La commande utilise l’API de sauvegarde en ligne de SQLite, contrôle l’intégrité
+de la copie, puis publie atomiquement un fichier daté comme
+`remediation-20260828T153000000000Z.db`. Le répertoire appartient à
+`root:root` avec le mode `0700` et chaque sauvegarde reçoit le mode `0600`. Un
+échec produit un message explicite et un code de sortie non nul ; la base
+principale n’est jamais remplacée.
+
+Un autre répertoire peut être choisi ponctuellement :
+
+```bash
+sudo okapi-backup --destination /chemin/protege
+```
+
+Pour restaurer manuellement une sauvegarde, arrêter le service, installer la
+copie avec le propriétaire de la base, appliquer les migrations, puis
+redémarrer :
+
+```bash
+sudo systemctl stop okapi.service
+sudo install -m 0660 -o okapi -g okapi \
+    /var/backups/okapi/remediation-DATE.db \
+    /var/lib/okapi/remediation.db
+sudo -u okapi /opt/okapi/bin/migrate-database
+sudo systemctl start okapi.service
+curl -fsS http://127.0.0.1:5000/health
+```
+
+La restauration est volontairement manuelle. Vérifier le fichier choisi avant
+de remplacer la base active.
+
+## 8. Réinstaller sur un autre serveur
 
 Une installation sans ancienne base crée un OKAPI propre, avec un historique
 vide. Pour conserver les incidents et l’historique, sauvegarder avant de
 supprimer l’ancien serveur :
 
-- `/var/lib/okapi/remediation.db` ;
+- la dernière sauvegarde créée avec `sudo okapi-backup` ;
 - `/etc/okapi/`, en protégeant particulièrement `secrets.env` ;
 - tout certificat et toute configuration du reverse proxy, s’ils existent.
 
@@ -222,13 +261,12 @@ Sur le nouveau serveur :
 5. exécuter les migrations ;
 6. redémarrer et vérifier le service.
 
-Exemple après avoir copié la base sauvegardée dans `/tmp` :
+Exemple après avoir copié une sauvegarde sûre dans `/tmp` :
 
 ```bash
 sudo systemctl stop okapi.service
-sudo cp /tmp/remediation.db /var/lib/okapi/remediation.db
-sudo chown okapi:okapi /var/lib/okapi/remediation.db
-sudo chmod 0660 /var/lib/okapi/remediation.db
+sudo install -m 0660 -o okapi -g okapi \
+    /tmp/remediation.db /var/lib/okapi/remediation.db
 sudo -u okapi /opt/okapi/bin/migrate-database
 sudo systemctl start okapi.service
 curl -fsS http://127.0.0.1:5000/health
@@ -238,7 +276,7 @@ Restaurer les fichiers de `/etc/okapi` uniquement depuis une sauvegarde sûre,
 puis vérifier que `/etc/okapi/secrets.env` appartient à `root:okapi` et conserve
 le mode `0640`.
 
-## 8. Mettre à jour une installation
+## 9. Mettre à jour une installation
 
 Copier le nouveau paquet sur le serveur puis lancer :
 
@@ -250,7 +288,7 @@ Les conffiles Debian modifiés localement et `/var/lib/okapi` sont conservés.
 Lire attentivement toute question d’APT concernant une nouvelle version d’un
 fichier de configuration, puis vérifier le service et `/health`.
 
-## 9. Désinstaller
+## 10. Désinstaller
 
 ```bash
 sudo apt remove okapi
@@ -260,19 +298,20 @@ Cette commande conserve l’état de `/var/lib/okapi`. Même avec
 `sudo apt purge okapi`, la base SQLite et le fichier local `secrets.env` sont
 volontairement conservés afin d’éviter une perte accidentelle. Les sauvegarder,
 puis les supprimer manuellement uniquement si leur destruction est réellement
-souhaitée.
+souhaitée. Les fichiers de `/var/backups/okapi` sont également conservés.
 
-## 10. Emplacements utiles
+## 11. Emplacements utiles
 
 - code et environnement Python : `/opt/okapi` ;
 - configuration : `/etc/okapi` ;
 - secrets : `/etc/okapi/secrets.env` ;
 - base SQLite : `/var/lib/okapi/remediation.db` ;
+- sauvegardes SQLite : `/var/backups/okapi` ;
 - commande CLI : `/usr/bin/okapi` ;
 - unité systemd : `/lib/systemd/system/okapi.service` ;
 - guide installé : `/usr/share/doc/okapi/INSTALL.md`.
 
-## 11. Construire le paquet depuis les sources
+## 12. Construire le paquet depuis les sources
 
 Cette section concerne seulement la machine de construction, pas le serveur
 cible. Sur Ubuntu 24.04 `amd64` avec accès à Internet :

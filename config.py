@@ -128,6 +128,9 @@ class Config:
     REMEDIATION_MAX_ATTEMPTS = int(os.getenv("REMEDIATION_MAX_ATTEMPTS", "2"))
     REMEDIATION_COOLDOWN_SECONDS = int(os.getenv("REMEDIATION_COOLDOWN_SECONDS", "60"))
     PORT_LOCK_DIR = state_path("PORT_LOCK_DIR", "port-locks")
+    SQLITE_BACKUP_DIR = _absolute_path(
+        os.getenv("SQLITE_BACKUP_DIR", ""), STATE_DIR / "backups"
+    )
     SNMP_MIB_PACKAGE = os.getenv("SNMP_MIB_PACKAGE", "pysnmp_mibs").strip()
     SNMP_MIB_PATH = optional_config_path("SNMP_MIB_PATH")
     SNMP_CAPABILITIES_PATH = config_path(

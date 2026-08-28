@@ -4,6 +4,7 @@ from flask import Flask
 from app.extensions import db
 
 from .incidents import incidents_cli
+from .backup import backup_sqlite_command
 from .remediation import remediation_cli
 from .snmp import snmp_cli
 from .okapi import okapi_cli
@@ -18,6 +19,7 @@ def init_db_command() -> None:
 
 def register_cli(app: Flask) -> None:
     app.cli.add_command(init_db_command)
+    app.cli.add_command(backup_sqlite_command)
     app.cli.add_command(incidents_cli)
     app.cli.add_command(remediation_cli)
     app.cli.add_command(snmp_cli)

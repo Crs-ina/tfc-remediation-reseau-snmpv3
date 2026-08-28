@@ -23,6 +23,16 @@ sudo apt install ./dist/okapi_1.0.0_amd64.deb
 
 The complete package procedure is in `packaging/debian/INSTALL.md`.
 
+Root can create a consistent online SQLite backup without stopping the service:
+
+```bash
+sudo okapi-backup
+```
+
+Backups are dated, integrity-checked and stored with restrictive permissions in
+`/var/backups/okapi`. Restoration remains an explicit, offline administrative
+operation documented in the installation guide.
+
 It displays the ASCII OKAPI banner and resolves the Linux account that launched
 the command. The corresponding `ADMINISTRATOR` identity is created
 automatically when absent and is used only for traceability. Linux/SSH owns

@@ -8,6 +8,7 @@ fi
 if [ "${1:-}" = "purge" ]; then
     echo "OKAPI history remains in /var/lib/okapi; remove it manually only after backup." >&2
     echo "The locally created /etc/okapi/secrets.env is also retained." >&2
+    echo "SQLite backups in /var/backups/okapi are retained." >&2
 fi
 
 exit 0

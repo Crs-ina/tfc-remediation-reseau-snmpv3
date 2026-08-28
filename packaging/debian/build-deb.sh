@@ -31,7 +31,7 @@ done
 install -d "$PACKAGE_ROOT/DEBIAN"
 install -d "$PACKAGE_ROOT/opt/okapi/bin" "$PACKAGE_ROOT/opt/okapi/wheels"
 install -d "$PACKAGE_ROOT/etc/okapi/playbooks"
-install -d "$PACKAGE_ROOT/usr/bin" "$PACKAGE_ROOT/lib/systemd/system"
+install -d "$PACKAGE_ROOT/usr/bin" "$PACKAGE_ROOT/usr/sbin" "$PACKAGE_ROOT/lib/systemd/system"
 install -d "$PACKAGE_ROOT/usr/share/doc/okapi"
 
 cp -a "$PROJECT_DIR/app" "$PACKAGE_ROOT/opt/okapi/"
@@ -56,6 +56,7 @@ install -m 0644 "$SCRIPT_DIR/secrets.env.example" \
     "$PACKAGE_ROOT/etc/okapi/secrets.env.example"
 
 install -m 0755 "$SCRIPT_DIR/okapi" "$PACKAGE_ROOT/usr/bin/okapi"
+install -m 0755 "$SCRIPT_DIR/okapi-backup" "$PACKAGE_ROOT/usr/sbin/okapi-backup"
 install -m 0755 "$SCRIPT_DIR/migrate-database" \
     "$PACKAGE_ROOT/opt/okapi/bin/migrate-database"
 install -m 0644 "$SCRIPT_DIR/okapi.service" \

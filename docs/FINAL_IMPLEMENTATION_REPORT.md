@@ -107,7 +107,10 @@ aucun SET réel ne peut sortir tant que la capacité demeure
 - rollback uniquement explicite, vers le snapshot, avec GET de vérification ;
 - audit avec auteur humain ou `SYSTEM`, sans secret SNMP/webhook ;
 - `/health` strictement read-only ;
-- menu CLI final, attention summary, filtres d'audit et System status réel.
+- menu CLI final, attention summary, filtres d'audit et System status réel ;
+- Refresh manuel des vues incidents/remédiations, sans polling ni mutation ;
+- sauvegarde locale SQLite cohérente via l’API de backup, lancée explicitement
+  par root et restaurée manuellement.
 
 ## Migration et schéma final ADMINISTRATOR
 

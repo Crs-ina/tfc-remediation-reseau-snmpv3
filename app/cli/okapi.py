@@ -49,6 +49,22 @@ from .ui.splash import preview_all, show_splash
 
 
 SUBTITLE = "Orchestrateur de Kimwenza Automatisé pour la Protection et l’Automatisation"
+_REFRESH_REQUESTED = object()
+
+
+def _refresh_database_view() -> None:
+    """Expire cached ORM state so the next SELECT reflects current SQLite data."""
+
+    db.session.expire_all()
+
+
+def _prompt_refresh_or_back() -> bool:
+    choice = click.prompt("[R] Refresh  [B] Back", default="B").strip().upper()
+    if choice == "R":
+        return True
+    if choice != "B":
+        click.echo("Invalid selection.")
+    return False
 
 
 def choose_banner_color() -> str:
@@ -103,45 +119,60 @@ def _banner(
     click.echo("-" * 56)
 
 
-def _pending(administrator: Administrator) -> None:
-    incidents = list(
-        db.session.execute(
-            db.select(Incident)
-            .where(Incident.processing_status == "WAITING_ADMIN_APPROVAL")
-            .order_by(Incident.detected_at.desc())
-        ).scalars()
-    )
-    incident = _select_incident(incidents)
-    if incident is None:
-        return
-    _show_incident(incident)
-    choice = click.prompt("[A] Approve  [R] Reject  [B] Back", default="B").strip().upper()
-    if choice == "A":
-        _approve_and_execute(administrator, incident)
-    elif choice == "R":
-        _reject(administrator, incident)
-
-
-def _all_incidents() -> None:
-    incidents = db.session.execute(
-        db.select(Incident).order_by(Incident.detected_at.desc()).limit(100)
-    ).scalars()
-    found = False
-    for incident in incidents:
-        found = True
-        click.echo(
-            f"{incident.incident_type or 'unknown'} | {local_time(incident.detected_at)} | "
-            f"{incident.processing_status} | {incident.playbook_id}"
+def _pending(administrator: Administrator, *, refreshable: bool = False) -> None:
+    while True:
+        _refresh_database_view()
+        incidents = list(
+            db.session.execute(
+                db.select(Incident)
+                .where(Incident.processing_status == "WAITING_ADMIN_APPROVAL")
+                .order_by(Incident.detected_at.desc())
+            ).scalars()
         )
-    if not found:
-        click.echo("No incidents found.")
+        selected = _select_incident(incidents, allow_refresh=refreshable)
+        if selected is _REFRESH_REQUESTED:
+            continue
+        if selected is None:
+            return
+        incident = selected
+        _show_incident(incident)
+        choice = click.prompt("[A] Approve  [R] Reject  [B] Back", default="B").strip().upper()
+        if choice == "A":
+            _approve_and_execute(administrator, incident)
+        elif choice == "R":
+            _reject(administrator, incident)
+        return
+
+
+def _all_incidents(*, refreshable: bool = False) -> None:
+    while True:
+        _refresh_database_view()
+        incidents = db.session.execute(
+            db.select(Incident).order_by(Incident.detected_at.desc()).limit(100)
+        ).scalars()
+        found = False
+        for incident in incidents:
+            found = True
+            click.echo(
+                f"{incident.incident_type or 'unknown'} | {local_time(incident.detected_at)} | "
+                f"{incident.processing_status} | {incident.playbook_id}"
+            )
+        if not found:
+            click.echo("No incidents found.")
+        if not refreshable or not _prompt_refresh_or_back():
+            return
 
 
 def _select_incident(
-    incidents: list[Incident], prompt: str = "Select incident"
-) -> Incident | None:
+    incidents: list[Incident],
+    prompt: str = "Select incident",
+    *,
+    allow_refresh: bool = False,
+) -> Incident | object | None:
     if not incidents:
         click.echo("No matching incidents.")
+        if allow_refresh and _prompt_refresh_or_back():
+            return _REFRESH_REQUESTED
         return None
     for number, incident in enumerate(incidents, 1):
         click.echo(
@@ -149,7 +180,10 @@ def _select_incident(
             f"{incident.severity or 'Unspecified'} | {local_time(incident.detected_at)} | "
             f"{incident.processing_status}"
         )
-    value = click.prompt(f"{prompt} (B to go back)", default="B").strip()
+    choices = "R to refresh, B to go back" if allow_refresh else "B to go back"
+    value = click.prompt(f"{prompt} ({choices})", default="B").strip()
+    if allow_refresh and value.upper() == "R":
+        return _REFRESH_REQUESTED
     if value.upper() == "B":
         return None
     try:
@@ -159,15 +193,22 @@ def _select_incident(
         return None
 
 
-def _incident_details() -> None:
-    incidents = list(
-        db.session.execute(
-            db.select(Incident).order_by(Incident.detected_at.desc()).limit(100)
-        ).scalars()
-    )
-    incident = _select_incident(incidents)
-    if incident:
-        _show_incident(incident)
+def _incident_details(*, refreshable: bool = False) -> None:
+    while True:
+        _refresh_database_view()
+        incidents = list(
+            db.session.execute(
+                db.select(Incident).order_by(Incident.detected_at.desc()).limit(100)
+            ).scalars()
+        )
+        selected = _select_incident(incidents, allow_refresh=refreshable)
+        if selected is _REFRESH_REQUESTED:
+            continue
+        if selected is None:
+            return
+        _show_incident(selected)
+        if not refreshable or not _prompt_refresh_or_back():
+            return
 
 
 def _show_incident(incident: Incident) -> None:
@@ -187,21 +228,31 @@ def _show_incident(incident: Incident) -> None:
     )
 
 
-def _decide(administrator: Administrator, approve: bool) -> None:
-    incidents = list(
-        db.session.execute(
-            db.select(Incident)
-            .where(Incident.processing_status == "WAITING_ADMIN_APPROVAL")
-            .order_by(Incident.detected_at)
-        ).scalars()
-    )
-    incident = _select_incident(incidents)
-    if incident is None:
+def _decide(
+    administrator: Administrator,
+    approve: bool,
+    *,
+    refreshable: bool = False,
+) -> None:
+    while True:
+        _refresh_database_view()
+        incidents = list(
+            db.session.execute(
+                db.select(Incident)
+                .where(Incident.processing_status == "WAITING_ADMIN_APPROVAL")
+                .order_by(Incident.detected_at)
+            ).scalars()
+        )
+        selected = _select_incident(incidents, allow_refresh=refreshable)
+        if selected is _REFRESH_REQUESTED:
+            continue
+        if selected is None:
+            return
+        if approve:
+            _approve_and_execute(administrator, selected)
+        else:
+            _reject(administrator, selected)
         return
-    if approve:
-        _approve_and_execute(administrator, incident)
-    else:
-        _reject(administrator, incident)
 
 
 def _approve_and_execute(administrator: Administrator, incident: Incident) -> None:
@@ -264,24 +315,28 @@ def _reject(administrator: Administrator, incident: Incident) -> None:
         click.echo(str(exc))
 
 
-def _remediation_history() -> None:
-    items = list(
-        db.session.execute(
-            db.select(Remediation).order_by(Remediation.start_time.desc())
-        ).scalars()
-    )
-    if not items:
-        click.echo("No remediation history.")
-        return
-    click.echo("OKAPI - REMEDIATION HISTORY")
-    for item in items:
-        click.echo(
-            f"\n{local_time(item.start_time)}\n"
-            f"Action      : {item.action_type}\n"
-            f"Mode        : {item.authorization_mode}\n"
-            f"{_remediation_actor_label(item)}\n"
-            f"Result      : {item.status}"
+def _remediation_history(*, refreshable: bool = False) -> None:
+    while True:
+        _refresh_database_view()
+        items = list(
+            db.session.execute(
+                db.select(Remediation).order_by(Remediation.start_time.desc())
+            ).scalars()
         )
+        if not items:
+            click.echo("No remediation history.")
+        else:
+            click.echo("OKAPI - REMEDIATION HISTORY")
+            for item in items:
+                click.echo(
+                    f"\n{local_time(item.start_time)}\n"
+                    f"Action      : {item.action_type}\n"
+                    f"Mode        : {item.authorization_mode}\n"
+                    f"{_remediation_actor_label(item)}\n"
+                    f"Result      : {item.status}"
+                )
+        if not refreshable or not _prompt_refresh_or_back():
+            return
 
 
 def _audit_period_bounds(value: str) -> tuple[datetime, datetime]:
@@ -838,29 +893,33 @@ def _guided_history_filters(records: list[HistoryRecord]) -> list[HistoryRecord]
     )
 
 
-def _logs() -> None:
-    mode = click.prompt(
-        "[1] Latest history [2] Filter history [B] Back",
-        default="1",
-    ).strip().upper()
-    if mode == "B":
-        return
-    records = _history_records()
-    try:
-        if mode == "2":
-            records = _guided_history_filters(records)
-        elif mode == "1":
-            records = records[:20]
-        else:
-            click.echo("Invalid selection.")
+def _logs(*, refreshable: bool = False) -> None:
+    while True:
+        _refresh_database_view()
+        mode = click.prompt(
+            "[1] Latest history [2] Filter history [B] Back",
+            default="1",
+        ).strip().upper()
+        if mode == "B":
             return
-    except ValueError as exc:
-        click.echo(str(exc))
-        return
-    if not records:
-        click.echo("No history found.")
-        return
-    _display_history(records)
+        records = _history_records()
+        try:
+            if mode == "2":
+                records = _guided_history_filters(records)
+            elif mode == "1":
+                records = records[:20]
+            else:
+                click.echo("Invalid selection.")
+                return
+        except ValueError as exc:
+            click.echo(str(exc))
+            return
+        if not records:
+            click.echo("No history found.")
+        else:
+            _display_history(records)
+        if not refreshable or not _prompt_refresh_or_back():
+            return
 
 
 def _actor_label(entry: AuditLog | None) -> str:
@@ -902,59 +961,67 @@ def _remediation_actor_label(remediation: Remediation) -> str:
     return f"{label} : {entry.administrator.system_username}"
 
 
-def _rollback(administrator: Administrator) -> None:
-    items = available_rollbacks()
-    if not items:
-        click.echo("Rollback unavailable. No successful remediation is available.")
-        return
-    click.echo("OKAPI - AVAILABLE ROLLBACKS")
-    for number, remediation in enumerate(items, 1):
-        target = _rollback_target(remediation)
-        state = (
-            f"Current VLAN    : {remediation.applied_vlan_id}\n"
-            f"    Restore VLAN    : {remediation.previous_vlan_id}"
-            if remediation.action_type == "QUARANTINE_VLAN"
-            else f"Current state   : {_admin_status_label(remediation.applied_port_status)}\n"
-            f"    Restore to      : {_admin_status_label(remediation.previous_port_status)}"
-        )
-        click.echo(
-            f"\n[{number}] {local_time(remediation.start_time)}\n"
-            f"    Target          : {target}\n"
-            f"    Action          : {remediation.action_type}\n"
-            f"    {state}\n"
-            f"    Mode            : {remediation.authorization_mode}\n"
-            f"    {_remediation_actor_label(remediation)}"
-        )
-    selected = click.prompt("Select remediation (or B to go back)", default="B").strip()
-    if selected.upper() == "B":
-        return
-    try:
-        remediation = items[int(selected) - 1]
-        reauthenticate_for_critical_action(administrator, "ROLLBACK")
-        observed = rollback_snmp_action(
-            remediation,
-            administrator_id=administrator.administrator_id,
-        )
-        is_vlan = remediation.action_type == "QUARANTINE_VLAN"
-        restored_label = (
-            f"VLAN: {observed}"
-            if is_vlan
-            else f"state: {format_if_admin_status(observed)}"
-        )
-        if is_dry_run_enabled():
-            click.echo(
-                f"Rollback simulated (DRY-RUN). Requested {restored_label}. "
-                "No SNMP SET was sent."
+def _rollback(administrator: Administrator, *, refreshable: bool = False) -> None:
+    while True:
+        _refresh_database_view()
+        items = available_rollbacks()
+        if not items:
+            click.echo("Rollback unavailable. No successful remediation is available.")
+            if refreshable and _prompt_refresh_or_back():
+                continue
+            return
+        click.echo("OKAPI - AVAILABLE ROLLBACKS")
+        for number, remediation in enumerate(items, 1):
+            target = _rollback_target(remediation)
+            state = (
+                f"Current VLAN    : {remediation.applied_vlan_id}\n"
+                f"    Restore VLAN    : {remediation.previous_vlan_id}"
+                if remediation.action_type == "QUARANTINE_VLAN"
+                else f"Current state   : {_admin_status_label(remediation.applied_port_status)}\n"
+                f"    Restore to      : {_admin_status_label(remediation.previous_port_status)}"
             )
-        else:
-            click.echo(f"Rollback succeeded. Restored {restored_label}")
-    except (
-        ValueError,
-        IndexError,
-        ReauthenticationError,
-        RemediationError,
-    ) as exc:
-        click.echo(f"Rollback unavailable: {exc}")
+            click.echo(
+                f"\n[{number}] {local_time(remediation.start_time)}\n"
+                f"    Target          : {target}\n"
+                f"    Action          : {remediation.action_type}\n"
+                f"    {state}\n"
+                f"    Mode            : {remediation.authorization_mode}\n"
+                f"    {_remediation_actor_label(remediation)}"
+            )
+        prompt = "Select remediation (R to refresh, B to go back)" if refreshable else "Select remediation (or B to go back)"
+        selected = click.prompt(prompt, default="B").strip()
+        if refreshable and selected.upper() == "R":
+            continue
+        if selected.upper() == "B":
+            return
+        try:
+            remediation = items[int(selected) - 1]
+            reauthenticate_for_critical_action(administrator, "ROLLBACK")
+            observed = rollback_snmp_action(
+                remediation,
+                administrator_id=administrator.administrator_id,
+            )
+            is_vlan = remediation.action_type == "QUARANTINE_VLAN"
+            restored_label = (
+                f"VLAN: {observed}"
+                if is_vlan
+                else f"state: {format_if_admin_status(observed)}"
+            )
+            if is_dry_run_enabled():
+                click.echo(
+                    f"Rollback simulated (DRY-RUN). Requested {restored_label}. "
+                    "No SNMP SET was sent."
+                )
+            else:
+                click.echo(f"Rollback succeeded. Restored {restored_label}")
+        except (
+            ValueError,
+            IndexError,
+            ReauthenticationError,
+            RemediationError,
+        ) as exc:
+            click.echo(f"Rollback unavailable: {exc}")
+        return
 
 
 def _rollback_target(remediation: Remediation) -> str:
@@ -1123,21 +1190,21 @@ def okapi(
             click.echo("Logged out.")
             return
         if choice == "1":
-            _pending(administrator)
+            _pending(administrator, refreshable=True)
         elif choice == "2":
-            _all_incidents()
+            _all_incidents(refreshable=True)
         elif choice == "3":
-            _incident_details()
+            _incident_details(refreshable=True)
         elif choice == "4":
-            _decide(administrator, True)
+            _decide(administrator, True, refreshable=True)
         elif choice == "5":
-            _decide(administrator, False)
+            _decide(administrator, False, refreshable=True)
         elif choice == "6":
-            _remediation_history()
+            _remediation_history(refreshable=True)
         elif choice == "7":
-            _logs()
+            _logs(refreshable=True)
         elif choice == "8":
-            _rollback(administrator)
+            _rollback(administrator, refreshable=True)
         elif choice == "9":
             _dry_run_menu(administrator)
         elif choice == "10":

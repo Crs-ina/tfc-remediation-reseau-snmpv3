@@ -61,3 +61,15 @@ def test_mutable_json_files_are_debian_conffiles():
     assert "/etc/okapi/whitelist.json" in conffiles
     assert "/etc/okapi/automation_schedule.json" in conffiles
     assert "/etc/okapi/playbooks/playbook_index.json" in conffiles
+
+
+def test_secrets_and_backup_directory_have_restrictive_initial_permissions():
+    postinst = (PACKAGING / "DEBIAN" / "postinst").read_text(encoding="utf-8")
+    build_script = (PACKAGING / "build-deb.sh").read_text(encoding="utf-8")
+    backup_launcher = (PACKAGING / "okapi-backup").read_text(encoding="utf-8")
+
+    assert "install -m 0640 -o root -g okapi /dev/null /etc/okapi/secrets.env" in postinst
+    assert "chmod 0640 /etc/okapi/secrets.env" in postinst
+    assert "install -d -m 0700 -o root -g root /var/backups/okapi" in postinst
+    assert '"$PACKAGE_ROOT/usr/sbin/okapi-backup"' in build_script
+    assert 'if [ "$(id -u)" -ne 0 ]; then' in backup_launcher
