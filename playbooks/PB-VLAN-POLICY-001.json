@@ -5,6 +5,6 @@
   "authorization": {"human_validation_policy": "mandatory_in_supervised_mode", "authorization_policy": "calendar_controlled", "approval_timeout": null, "waiting_request_never_auto_converts": true},
   "automation": {"allowed_outside_business_hours": true, "periods": ["night", "weekend", "public_holiday"]},
   "decision": {"proposed_action": "QUARANTINE_VLAN", "disruptive": true, "required_conditions": ["switch_confirmed", "port_confirmed", "pvid_confirmed", "target_not_whitelisted", "quarantine_vlan_exists", "quarantine_vlan_is_fully_isolated", "pre_action_snapshot_saved", "snmp_write_capability_validated"]},
-  "quarantine": {"vlan_id_source": "QUARANTINE_VLAN_ID", "pvid_change_alone_is_not_proof_of_isolation": true},
+  "quarantine": {"vlan_id_source": "remediation.json:quarantine_vlan_id", "pvid_change_alone_is_not_proof_of_isolation": true},
   "rollback": {"automatic": false, "restore": "previous_vlan_id", "requester": "network_administrator_only"}
 }

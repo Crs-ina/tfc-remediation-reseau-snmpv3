@@ -37,7 +37,7 @@
     ]
   },
   "quarantine": {
-    "vlan_id_source": "QUARANTINE_VLAN_ID",
+    "vlan_id_source": "remediation.json:quarantine_vlan_id",
     "pvid_change_alone_is_not_proof_of_isolation": true
   },
   "rollback": {

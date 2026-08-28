@@ -19,11 +19,17 @@ from app.snmp.client import (
 )
 from app.snmp.mib_catalog import DOT1D_BASE_PORT_IF_INDEX, DOT1Q_PVID, IF_ADMIN_STATUS
 from app.snmp.mib_registry import MibRegistry
+from app.snmp.value_formatting import (
+    format_action_value,
+    format_if_admin_status,
+    parse_safe_if_admin_status,
+)
 
 from .audit import record_audit
 from .administrators import IdentityError, require_administrator
 from .port_lock import PortBusyError, port_write_lock
 from .remediation import RemediationError, UnsafeOperationBlocked
+from .remediation_config import RemediationConfigError, load_quarantine_vlan_id
 from .runtime_settings import is_dry_run_enabled
 from .whitelist import is_port_protected
 
@@ -129,8 +135,20 @@ def execute_quarantine_vlan(
     ):
         _block_execution(incident, remediation, "port_became_whitelisted")
 
+    try:
+        requested_vlan = load_quarantine_vlan_id(
+            current_app.config["REMEDIATION_CONFIG_PATH"]
+        )
+    except RemediationConfigError as exc:
+        _block_execution(
+            incident,
+            remediation,
+            f"remediation_config_invalid:{exc}",
+            status="BLOCKED_SNMP_WRITE",
+        )
+
     if is_dry_run_enabled():
-        return _dry_run_result(incident, remediation, current_app.config["QUARANTINE_VLAN_ID"])
+        return _dry_run_result(incident, remediation, requested_vlan)
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         _block_execution(incident, remediation, "SNMP_WRITE_ENABLED=false")
     _enforce_cooldown(incident, remediation)
@@ -157,7 +175,6 @@ def execute_quarantine_vlan(
         mib_registry,
         dry_run=is_dry_run_enabled(),
     )
-    requested_vlan = int(current_app.config["QUARANTINE_VLAN_ID"])
     pvid_ref = DOT1Q_PVID.with_indices(remediation.port_index)
 
     pre_timing = _preapproval_timing(incident.incident_id)
@@ -285,6 +302,12 @@ def execute_interface_admin_action(
         _block_execution(incident, remediation, "port_became_whitelisted")
     if is_dry_run_enabled():
         return _dry_run_result(incident, remediation, expected)
+    _block_execution(
+        incident,
+        remediation,
+        "IF-MIB::ifAdminStatus write is TO_BE_VALIDATED; only dot1qPvid is LAB_VALIDATED.",
+        status="BLOCKED_SNMP_CAPABILITY",
+    )
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         _block_execution(incident, remediation, "SNMP_WRITE_ENABLED=false")
     _enforce_cooldown(incident, remediation)
@@ -320,7 +343,9 @@ def execute_interface_admin_action(
             incident,
             remediation,
             "PRE_ACTION_STATE_CHANGED",
-            f"Expected ifAdminStatus {saved_previous}, observed {observed_before}",
+            "Expected ifAdminStatus "
+            f"{format_if_admin_status(saved_previous)}, observed "
+            f"{format_if_admin_status(observed_before)}",
         )
     try:
         with port_write_lock(current_app.config["PORT_LOCK_DIR"], remediation.switch_id, remediation.port_index):
@@ -353,7 +378,13 @@ def execute_interface_admin_action(
         total_automated_seconds=total_automated_seconds,
     )
     if observed != expected:
-        _fail_execution(incident, remediation, "SNMP_POST_ACTION_MISMATCH", f"Expected {expected}, observed {observed}")
+        _fail_execution(
+            incident,
+            remediation,
+            "SNMP_POST_ACTION_MISMATCH",
+            f"Expected {format_if_admin_status(expected)}, observed "
+            f"{format_if_admin_status(observed)}",
+        )
     remediation.status = "SUCCEEDED"
     remediation.end_time = datetime.now(timezone.utc)
     remediation.applied_port_status = _admin_status_label(observed)
@@ -369,7 +400,9 @@ def execute_interface_admin_action(
         port_index=remediation.port_index, target_mac=remediation.target_mac_address,
         incident_type=incident.incident_type, action_type=remediation.action_type,
         result_status="SUCCEEDED", details={"mib_object": IF_ADMIN_STATUS.key, "if_index": if_index,
-        "requested_value": expected, "observed_value": observed, "authorization_mode": remediation.authorization_mode,
+        "requested_state": format_if_admin_status(expected),
+        "observed_state": format_if_admin_status(observed),
+        "authorization_mode": remediation.authorization_mode,
         "t_identification_seconds": timing.identification_seconds,
         "t_prechecks_seconds": timing.prechecks_seconds,
         "t_snmp_set_seconds": timing.snmp_set_seconds,
@@ -578,6 +611,12 @@ def rollback_interface_admin_action(
             previous,
             administrator_id=administrator_id,
         )
+    _block_execution(
+        incident,
+        remediation,
+        "IF-MIB::ifAdminStatus rollback is TO_BE_VALIDATED; only dot1qPvid is LAB_VALIDATED.",
+        status="BLOCKED_SNMP_CAPABILITY",
+    )
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         _block_execution(incident, remediation, "SNMP_WRITE_ENABLED=false")
     registry: MibRegistry = current_app.extensions["snmp_mib_registry"]
@@ -637,7 +676,13 @@ def rollback_interface_admin_action(
     except (SnmpClientError, ValueError) as exc:
         _fail_rollback(incident, remediation, str(exc), administrator_id)
     if observed != previous:
-        _fail_rollback(incident, remediation, f"Expected {previous}, observed {observed}", administrator_id)
+        _fail_rollback(
+            incident,
+            remediation,
+            f"Expected {format_if_admin_status(previous)}, observed "
+            f"{format_if_admin_status(observed)}",
+            administrator_id,
+        )
     remediation.status = "ROLLED_BACK"
     remediation.end_time = datetime.now(timezone.utc)
     incident.processing_status = "ROLLED_BACK"
@@ -903,6 +948,11 @@ def _dry_run_result(incident: Incident, remediation: Remediation, requested: int
     timing = ExecutionTiming(0.0, 0.0, 0.0, 0.0, 0.0)
     observed = _snapshot_value(remediation, requested)
     network_switch = db.session.get(NetworkSwitch, remediation.switch_id)
+    value_details = _display_value_details(
+        remediation.action_type,
+        requested=requested,
+        observed=observed,
+    )
     record_audit(
         incident_id=incident.incident_id, remediation_id=remediation.remediation_id,
         administrator_id=_remediation_administrator_id(remediation),
@@ -916,8 +966,7 @@ def _dry_run_result(incident: Incident, remediation: Remediation, requested: int
             "execution_mode": "DRY_RUN",
             "outcome": "SIMULATED",
             "write_result": "NO_WRITE",
-            "requested_value": int(requested),
-            "observed_value": observed,
+            **value_details,
             "snmp_set_executed": False,
             "snmp_write_enabled": bool(current_app.config["SNMP_WRITE_ENABLED"]),
             "authorization_mode": remediation.authorization_mode,
@@ -941,6 +990,10 @@ def _dry_run_rollback_result(
     administrator_id: str,
 ) -> int:
     network_switch = db.session.get(NetworkSwitch, remediation.switch_id)
+    value_details = _display_value_details(
+        remediation.action_type,
+        requested=requested,
+    )
     record_audit(
         incident_id=incident.incident_id,
         remediation_id=remediation.remediation_id,
@@ -958,7 +1011,7 @@ def _dry_run_rollback_result(
             "execution_mode": "DRY_RUN",
             "outcome": "SIMULATED",
             "write_result": "NO_WRITE",
-            "requested_value": int(requested),
+            **value_details,
             "snmp_set_executed": False,
             "snmp_write_enabled": bool(current_app.config["SNMP_WRITE_ENABLED"]),
         },
@@ -1065,16 +1118,31 @@ def _block_rollback_state_changed(
 
 
 def _admin_status_value(value: str) -> int:
-    normalized = value.strip().lower()
-    if normalized in {"1", "up", "up(1)"}:
-        return 1
-    if normalized in {"2", "down", "down(2)"}:
-        return 2
-    raise RemediationError("The saved administrative state is not a safe rollback value.")
+    try:
+        return parse_safe_if_admin_status(value)
+    except ValueError as exc:
+        raise RemediationError(str(exc)) from exc
 
 
 def _admin_status_label(value: int | str) -> str:
-    return "UP" if _admin_status_value(str(value)) == 1 else "DOWN"
+    return format_if_admin_status(value)
+
+
+def _display_value_details(
+    action_type: str,
+    *,
+    requested: int,
+    observed: int | None = None,
+) -> dict[str, str]:
+    if action_type == "QUARANTINE_VLAN":
+        details = {"requested_vlan": format_action_value(action_type, requested)}
+        if observed is not None:
+            details["observed_vlan"] = format_action_value(action_type, observed)
+        return details
+    details = {"requested_state": format_action_value(action_type, requested)}
+    if observed is not None:
+        details["observed_state"] = format_action_value(action_type, observed)
+    return details
 
 
 def _verification_failed(

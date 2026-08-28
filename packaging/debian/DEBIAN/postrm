@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+
+if [ "${1:-}" = "purge" ]; then
+    echo "OKAPI history remains in /var/lib/okapi; remove it manually only after backup." >&2
+    echo "The locally created /etc/okapi/secrets.env is also retained." >&2
+fi
+
+exit 0

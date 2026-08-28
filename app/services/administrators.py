@@ -30,44 +30,28 @@ class SystemIdentity:
 
 
 def current_system_identity() -> SystemIdentity:
-    """Resolve the real Linux administrator who launched OKAPI."""
+    """Resolve the Linux account that is actually running the OKAPI CLI."""
 
     display_name: str | None = None
-
     if os.name == "posix":
         try:
             import pwd
 
-            original_username = os.environ.get("OKAPI_CALLER")
-
-            if original_username:
-                account = pwd.getpwnam(original_username)
-            else:
-                account = pwd.getpwuid(os.geteuid())
-
+            account = pwd.getpwuid(os.geteuid())
             username = account.pw_name
             gecos_name = account.pw_gecos.split(",", maxsplit=1)[0].strip()
             display_name = gecos_name or None
-
         except (ImportError, KeyError, OSError) as exc:
             raise IdentityError(
                 "Unable to resolve the current Linux account."
             ) from exc
-
     else:
         username = getpass.getuser()
 
     normalized = username.strip()
-
     if not normalized or len(normalized) > 128:
-        raise IdentityError(
-            "The operating-system username is missing or invalid."
-        )
-
-    return SystemIdentity(
-        system_username=normalized,
-        display_name=display_name,
-    )
+        raise IdentityError("The operating-system username is missing or invalid.")
+    return SystemIdentity(normalized, display_name)
 
 
 def resolve_current_administrator(
@@ -144,12 +128,7 @@ def reauthenticate_for_critical_action(
     platform_name: str | None = None,
     identity_resolver: Callable[[], SystemIdentity] = current_system_identity,
 ) -> None:
-    """Force Linux/PAM reauthentication through ``sudo`` without reading a password.
-
-    ``sudo -k`` invalidates the cached timestamp and ``sudo -v`` performs the
-    interactive PAM exchange directly with the terminal. OKAPI never receives,
-    stores or logs the password.
-    """
+    """Force PAM reauthentication with sudo without handling a password."""
 
     platform = platform_name or os.name
     try:
@@ -157,6 +136,7 @@ def reauthenticate_for_critical_action(
     except IdentityError as exc:
         _record_reauthentication(administrator, action, False, str(exc))
         raise ReauthenticationError(str(exc)) from exc
+
     if current_identity.system_username != administrator.system_username:
         reason = "The current Linux identity changed during the OKAPI session."
         _record_reauthentication(administrator, action, False, reason)
@@ -167,7 +147,12 @@ def reauthenticate_for_critical_action(
         raise ReauthenticationError(reason)
 
     try:
-        administrator.system_username
+        invalidated = runner(["sudo", "-k"], check=False)
+        completed = (
+            runner(["sudo", "-v"], check=False)
+            if invalidated.returncode == 0
+            else invalidated
+        )
     except (FileNotFoundError, OSError) as exc:
         reason = "The Linux sudo/PAM reauthentication service is unavailable."
         _record_reauthentication(administrator, action, False, reason)
@@ -178,110 +163,7 @@ def reauthenticate_for_critical_action(
         _record_reauthentication(administrator, action, False, reason)
         raise ReauthenticationError(reason)
     _record_reauthentication(administrator, action, True, None)
-def reauthenticate_for_critical_action(
-    administrator: Administrator,
-    action: str,
-    *,
-    runner: RunCommand = subprocess.run,
-    platform_name: str | None = None,
-    identity_resolver: Callable[[], SystemIdentity] = current_system_identity,
-) -> None:
-    """Force Linux/PAM reauthentication for a critical OKAPI action.
 
-    The administrator must confirm the critical action using the password
-    of their own Linux account.
-
-    Authentication is delegated to Linux/PAM through ``su``.
-    OKAPI never receives, stores, or logs the password.
-    """
-
-    platform = platform_name or os.name
-
-    # Vérifier l'identité qui utilise actuellement la session OKAPI.
-    try:
-        current_identity = identity_resolver()
-    except IdentityError as exc:
-        _record_reauthentication(
-            administrator,
-            action,
-            False,
-            str(exc),
-        )
-        raise ReauthenticationError(str(exc)) from exc
-
-    # L'identité active doit être la même que celle enregistrée
-    # comme administrateur dans OKAPI.
-    if current_identity.system_username != administrator.system_username:
-        reason = (
-            "The current Linux identity changed during the OKAPI session."
-        )
-        _record_reauthentication(
-            administrator,
-            action,
-            False,
-            reason,
-        )
-        raise ReauthenticationError(reason)
-
-   
-    if platform != "posix":
-        reason = (
-            "System reauthentication is available only "
-            "on the Linux deployment."
-        )
-        _record_reauthentication(
-            administrator,
-            action,
-            False,
-            reason,
-        )
-        raise ReauthenticationError(reason)
-
-    
-    try:
-        completed = runner(
-            [
-                "su",
-                "-",
-                administrator.system_username,
-                "-c",
-                "true",
-            ],
-            check=False,
-        )
-    except (FileNotFoundError, OSError) as exc:
-        reason = (
-            "The Linux/PAM reauthentication service is unavailable."
-        )
-        _record_reauthentication(
-            administrator,
-            action,
-            False,
-            reason,
-        )
-        raise ReauthenticationError(reason) from exc
-
-    
-    if completed.returncode != 0:
-        reason = (
-            "System reauthentication failed; "
-            "the critical action was refused."
-        )
-        _record_reauthentication(
-            administrator,
-            action,
-            False,
-            reason,
-        )
-        raise ReauthenticationError(reason)
-
-    
-    _record_reauthentication(
-        administrator,
-        action,
-        True,
-        None,
-    )
 
 def _record_reauthentication(
     administrator: Administrator,

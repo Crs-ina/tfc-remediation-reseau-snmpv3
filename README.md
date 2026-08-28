@@ -14,6 +14,15 @@ python -m pip install -e .
 okapi
 ```
 
+For Ubuntu 24.04 amd64, build and install the Debian package instead:
+
+```bash
+bash packaging/debian/build-deb.sh
+sudo apt install ./dist/okapi_1.0.0_amd64.deb
+```
+
+The complete package procedure is in `packaging/debian/INSTALL.md`.
+
 It displays the ASCII OKAPI banner and resolves the Linux account that launched
 the command. The corresponding `ADMINISTRATOR` identity is created
 automatically when absent and is used only for traceability. Linux/SSH owns
@@ -106,7 +115,8 @@ refuse même si une configuration de capacité était modifiée par erreur.
   le SET.
 - Le PVID est relu après l’approbation et doit encore correspondre au snapshot
   pré-action.
-- Le SET vers le VLAN 18 n’est déclaré réussi qu’après un GET égal à 18.
+- Le SET vers le VLAN défini dans `config/remediation.json` n’est déclaré
+  réussi qu’après un GET égal à la valeur demandée.
 - Deux tentatives maximum sont permises, un cooldown de 60 secondes et un
   verrou inter-processus sérialisent les actions sur un même port.
 - `DRY_RUN=true` est prioritaire sur `SNMP_WRITE_ENABLED` et bloque tous les
@@ -241,7 +251,7 @@ SNMPv3                   : READY
 SNMP writes              : BLOCKED BY DRY-RUN
 Dry-run mode             : ON
 Authorization mode       : SUPERVISED
-Quarantine VLAN          : 18
+Quarantine VLAN          : VLAN 18
 Remediation cooldown     : 60 s
 ```
 

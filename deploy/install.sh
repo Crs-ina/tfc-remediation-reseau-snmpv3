@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="/home/exauceeadm/tfc-remediation-reseau-snmpv3"
-SERVICE_SOURCE="$REPO_DIR/deploy/systemd/okapi-backend.service"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+PACKAGE="$PROJECT_DIR/dist/okapi_1.0.0_amd64.deb"
 
-test -f "$REPO_DIR/.env"
-test -x "$REPO_DIR/.venv/bin/gunicorn"
-test -x "$REPO_DIR/.venv/bin/okapi"
-sudo install -m 0644 "$SERVICE_SOURCE" /etc/systemd/system/okapi-backend.service
-sudo ln -sfn "$REPO_DIR/.venv/bin/okapi" /usr/local/bin/okapi
-sudo systemctl daemon-reload
-sudo systemctl enable okapi-backend
-sudo systemctl restart okapi-backend
-sudo systemctl --no-pager --full status okapi-backend
-curl --fail --silent --show-error http://127.0.0.1:5000/health
+if [ ! -f "$PACKAGE" ]; then
+    echo "Package not found: $PACKAGE" >&2
+    echo "Build it first with: bash packaging/debian/build-deb.sh" >&2
+    exit 1
+fi
+
+sudo apt install "$PACKAGE"
+echo "Configure /etc/okapi/secrets.env before starting okapi.service."

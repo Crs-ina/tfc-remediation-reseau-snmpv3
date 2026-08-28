@@ -7,7 +7,30 @@ from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent
+
+
+def _absolute_path(raw: str, default: Path) -> Path:
+    value = raw.strip()
+    if not value:
+        return default
+    path = Path(value)
+    return path if path.is_absolute() else BASE_DIR / path
+
+
+CONFIG_DIR = _absolute_path(
+    os.getenv("OKAPI_CONFIG_DIR", ""), BASE_DIR / "config"
+)
+STATE_DIR = _absolute_path(os.getenv("OKAPI_STATE_DIR", ""), BASE_DIR / "data")
+
+# Development keeps using the repository .env. Debian launchers point these
+# two variables at /etc/okapi without making paths depend on the caller's CWD.
 load_dotenv(BASE_DIR / ".env")
+runtime_environment = os.getenv("OKAPI_ENV_FILE", "").strip()
+if runtime_environment:
+    load_dotenv(_absolute_path(runtime_environment, BASE_DIR / ".env"))
+secrets_environment = os.getenv("OKAPI_SECRETS_ENV", "").strip()
+if secrets_environment:
+    load_dotenv(_absolute_path(secrets_environment, BASE_DIR / ".env"))
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -30,7 +53,11 @@ def env_csv(name: str, default: str = "") -> tuple[str, ...]:
 
 
 def database_uri() -> str:
-    raw = os.getenv("DATABASE_URL", "sqlite:///data/remediation.db").strip()
+    raw = os.getenv("DATABASE_URL", "").strip()
+    if not raw:
+        database_path = STATE_DIR / "remediation.db"
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        return f"sqlite:///{database_path.as_posix()}"
     if not raw.startswith("sqlite:///"):
         return raw
 
@@ -43,7 +70,17 @@ def database_uri() -> str:
 
 
 def config_path(environment_name: str, relative_default: str) -> Path:
-    raw = os.getenv(environment_name, relative_default).strip()
+    raw = os.getenv(environment_name, "").strip()
+    if not raw:
+        return CONFIG_DIR / relative_default
+    path = Path(raw)
+    return path if path.is_absolute() else BASE_DIR / path
+
+
+def state_path(environment_name: str, relative_default: str) -> Path:
+    raw = os.getenv(environment_name, "").strip()
+    if not raw:
+        return STATE_DIR / relative_default
     path = Path(raw)
     return path if path.is_absolute() else BASE_DIR / path
 
@@ -76,29 +113,31 @@ class Config:
     REMEDIATION_TAG_VALUE = os.getenv("REMEDIATION_TAG_VALUE", "enabled").strip()
 
     AUTOMATION_SCHEDULE_PATH = config_path(
-        "AUTOMATION_SCHEDULE_PATH", "config/automation_schedule.json"
+        "AUTOMATION_SCHEDULE_PATH", "automation_schedule.json"
     )
-    WHITELIST_PATH = config_path("WHITELIST_PATH", "config/whitelist.json")
-    QUARANTINE_VLAN_ID = int(os.getenv("QUARANTINE_VLAN_ID", "18"))
+    WHITELIST_PATH = config_path("WHITELIST_PATH", "whitelist.json")
+    REMEDIATION_CONFIG_PATH = config_path(
+        "REMEDIATION_CONFIG_PATH", "remediation.json"
+    )
 
     SNMP_WRITE_ENABLED = env_bool("SNMP_WRITE_ENABLED", False)
     DRY_RUN = env_bool("DRY_RUN", False)
-    RUNTIME_SETTINGS_PATH = config_path(
-        "RUNTIME_SETTINGS_PATH", "data/runtime-settings.json"
+    RUNTIME_SETTINGS_PATH = state_path(
+        "RUNTIME_SETTINGS_PATH", "runtime-settings.json"
     )
     REMEDIATION_MAX_ATTEMPTS = int(os.getenv("REMEDIATION_MAX_ATTEMPTS", "2"))
     REMEDIATION_COOLDOWN_SECONDS = int(os.getenv("REMEDIATION_COOLDOWN_SECONDS", "60"))
-    PORT_LOCK_DIR = config_path("PORT_LOCK_DIR", "data/port-locks")
+    PORT_LOCK_DIR = state_path("PORT_LOCK_DIR", "port-locks")
     SNMP_MIB_PACKAGE = os.getenv("SNMP_MIB_PACKAGE", "pysnmp_mibs").strip()
     SNMP_MIB_PATH = optional_config_path("SNMP_MIB_PATH")
     SNMP_CAPABILITIES_PATH = config_path(
-        "SNMP_CAPABILITIES_PATH", "config/snmp_capabilities.json"
+        "SNMP_CAPABILITIES_PATH", "snmp_capabilities.json"
     )
     QUARANTINE_VLAN_EXISTS = env_bool("QUARANTINE_VLAN_EXISTS", False)
     QUARANTINE_VLAN_ISOLATED = env_bool("QUARANTINE_VLAN_ISOLATED", False)
 
     SCHEMA_PATH = BASE_DIR / "schemas" / "zabbix_webhook_payload_schema_v1.0.json"
-    PLAYBOOKS_DIR = BASE_DIR / "playbooks"
+    PLAYBOOKS_DIR = config_path("PLAYBOOKS_DIR", "playbooks")
     MAX_CONTENT_LENGTH = WEBHOOK_MAX_CONTENT_LENGTH
 
 

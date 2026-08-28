@@ -29,9 +29,39 @@ from app.services.snmp_preparation import (
     prepare_port_incident_with_snmp,
 )
 from app.services.runtime_settings import is_dry_run_enabled
+from app.snmp.value_formatting import (
+    format_action_value,
+    format_if_admin_status,
+    format_if_oper_status,
+    format_vlan_id,
+)
 
 
 remediation_cli = AppGroup("remediation", help="Advanced remediation maintenance commands.")
+
+
+def _display_preparation_result(result) -> dict[str, object]:
+    payload = asdict(result)
+    resolution = payload.get("resolution")
+    if isinstance(resolution, dict):
+        if "previous_if_admin_status" in resolution:
+            resolution["previous_if_admin_status"] = format_if_admin_status(
+                resolution["previous_if_admin_status"]
+            )
+        if resolution.get("previous_pvid") is not None:
+            resolution["previous_pvid"] = format_vlan_id(
+                resolution["previous_pvid"]
+            )
+    return payload
+
+
+def _display_physical_check(result) -> dict[str, object]:
+    payload = asdict(result)
+    payload["if_admin_status"] = format_if_admin_status(
+        payload["if_admin_status"]
+    )
+    payload["if_oper_status"] = format_if_oper_status(payload["if_oper_status"])
+    return payload
 
 
 def _incident_or_fail(incident_id: str) -> Incident:
@@ -112,7 +142,9 @@ def prepare_snmp_command(
         )
     except RemediationError as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False))
+    click.echo(
+        json.dumps(_display_preparation_result(result), indent=2, ensure_ascii=False)
+    )
 
 
 @remediation_cli.command("prepare-port")
@@ -134,7 +166,9 @@ def prepare_port_command(incident_id: str, switch_id: str, bridge_port: int,
         )
     except RemediationError as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False))
+    click.echo(
+        json.dumps(_display_preparation_result(result), indent=2, ensure_ascii=False)
+    )
 
 
 @remediation_cli.command("inspect-physical")
@@ -154,7 +188,9 @@ def inspect_physical_command(
         )
     except RemediationError as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False))
+    click.echo(
+        json.dumps(_display_physical_check(result), indent=2, ensure_ascii=False)
+    )
 
 
 @remediation_cli.command("refuse")
@@ -173,11 +209,26 @@ def refuse_command(incident_id: str) -> None:
 @remediation_cli.command("execute")
 @click.argument("incident_id")
 def execute_command(incident_id: str) -> None:
+    incident = _incident_or_fail(incident_id)
     try:
-        result = execute_authorized_remediation(_incident_or_fail(incident_id))
+        result = execute_authorized_remediation(incident)
     except (RemediationError, UnsafeOperationBlocked) as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False))
+    payload = asdict(result)
+    remediation = incident.remediations[-1]
+    if remediation.action_type == "QUARANTINE_VLAN":
+        payload["requested_vlan"] = format_vlan_id(result.requested_vlan)
+        payload["observed_vlan"] = format_vlan_id(result.observed_vlan)
+    else:
+        payload.pop("requested_vlan", None)
+        payload.pop("observed_vlan", None)
+        payload["requested_state"] = format_action_value(
+            remediation.action_type, result.requested_vlan
+        )
+        payload["observed_state"] = format_action_value(
+            remediation.action_type, result.observed_vlan
+        )
+    click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 @remediation_cli.command("rollback")
@@ -186,8 +237,9 @@ def rollback_command(incident_id: str) -> None:
     try:
         administrator = resolve_current_administrator()
         reauthenticate_for_critical_action(administrator, "ROLLBACK")
-        observed_pvid = rollback_snmp_action(
-            _incident_or_fail(incident_id),
+        incident = _incident_or_fail(incident_id)
+        observed_value = rollback_snmp_action(
+            incident,
             administrator_id=administrator.administrator_id,
         )
     except (
@@ -197,4 +249,15 @@ def rollback_command(incident_id: str) -> None:
         UnsafeOperationBlocked,
     ) as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(json.dumps({"observed_value": observed_pvid}, indent=2))
+    remediation = incident.remediations[-1]
+    label = (
+        "restored_vlan"
+        if remediation.action_type == "QUARANTINE_VLAN"
+        else "restored_state"
+    )
+    click.echo(
+        json.dumps(
+            {label: format_action_value(remediation.action_type, observed_value)},
+            indent=2,
+        )
+    )

@@ -37,7 +37,12 @@ from app.services.runtime_settings import (
     change_dry_run_mode,
     is_dry_run_enabled,
 )
+from app.services.remediation_config import (
+    RemediationConfigError,
+    load_quarantine_vlan_id,
+)
 from app.services.snmp_execution import available_rollbacks, rollback_snmp_action
+from app.snmp.value_formatting import format_if_admin_status
 
 from .ui.colors import PALETTES
 from .ui.splash import preview_all, show_splash
@@ -930,13 +935,19 @@ def _rollback(administrator: Administrator) -> None:
             remediation,
             administrator_id=administrator.administrator_id,
         )
+        is_vlan = remediation.action_type == "QUARANTINE_VLAN"
+        restored_label = (
+            f"VLAN: {observed}"
+            if is_vlan
+            else f"state: {format_if_admin_status(observed)}"
+        )
         if is_dry_run_enabled():
             click.echo(
-                f"Rollback simulated (DRY-RUN). Requested value: {observed}. "
+                f"Rollback simulated (DRY-RUN). Requested {restored_label}. "
                 "No SNMP SET was sent."
             )
         else:
-            click.echo(f"Rollback succeeded. Restored value: {observed}")
+            click.echo(f"Rollback succeeded. Restored {restored_label}")
     except (
         ValueError,
         IndexError,
@@ -963,14 +974,7 @@ def _rollback_target(remediation: Remediation) -> str:
 
 
 def _admin_status_label(value: str | None) -> str:
-    if value is None:
-        return "UNKNOWN"
-    normalized = value.strip().lower()
-    if normalized in {"1", "up", "up(1)"}:
-        return "UP"
-    if normalized in {"2", "down", "down(2)"}:
-        return "DOWN"
-    return "UNKNOWN"
+    return format_if_admin_status(value)
 
 
 def _dry_run_menu(administrator: Administrator) -> None:
@@ -1005,6 +1009,10 @@ def _system_status(administrator: Administrator) -> None:
         and current_app.config["WEBHOOK_ALLOWED_SOURCE_IPS"]
     )
     dry_run = is_dry_run_enabled()
+    try:
+        quarantine_vlan = f"VLAN {load_quarantine_vlan_id(current_app.config['REMEDIATION_CONFIG_PATH'])}"
+    except RemediationConfigError:
+        quarantine_vlan = "NOT READY (invalid remediation.json)"
     values = (
         ("Administrator", administrator.system_username),
         ("Zabbix integration", "READY" if webhook_ready else "NOT READY"),
@@ -1012,7 +1020,7 @@ def _system_status(administrator: Administrator) -> None:
         ("SNMP writes", _snmp_write_state()),
         ("Dry-run mode", "ON" if dry_run else "OFF"),
         ("Authorization mode", schedule.mode),
-        ("Quarantine VLAN", str(current_app.config["QUARANTINE_VLAN_ID"])),
+        ("Quarantine VLAN", quarantine_vlan),
         ("Remediation cooldown", f"{current_app.config['REMEDIATION_COOLDOWN_SECONDS']} s"),
     )
     click.echo("OKAPI — SYSTEM STATUS\n")

@@ -40,6 +40,8 @@ data/runtime-settings.json
 
 # Packaging Python
 *.egg-info/
+dist/
+packaging/debian/build/
 
 # Sauvegardes locales OKAPI
 config/*.backup

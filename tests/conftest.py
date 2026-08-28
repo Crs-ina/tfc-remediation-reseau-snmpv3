@@ -11,6 +11,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture()
 def app(tmp_path):
+    remediation_config = tmp_path / "remediation.json"
+    remediation_config.write_text(
+        '{"quarantine_vlan_id": 18}', encoding="utf-8"
+    )
     application = create_app(
         overrides={
             "TESTING": True,
@@ -24,7 +28,7 @@ def app(tmp_path):
             / "config"
             / "automation_schedule.json",
             "WHITELIST_PATH": PROJECT_ROOT / "config" / "whitelist.json",
-            "QUARANTINE_VLAN_ID": 18,
+            "REMEDIATION_CONFIG_PATH": remediation_config,
             "QUARANTINE_VLAN_EXISTS": True,
             "QUARANTINE_VLAN_ISOLATED": True,
             "SNMP_WRITE_ENABLED": False,

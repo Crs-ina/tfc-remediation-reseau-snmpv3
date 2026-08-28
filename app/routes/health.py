@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.extensions import db
 from app.services.calendar_policy import load_automation_schedule
 from app.services.runtime_settings import is_dry_run_enabled
+from app.services.remediation_config import load_quarantine_vlan_id
 from app.snmp.capabilities import load_capabilities
 
 
@@ -41,11 +42,15 @@ def health():
     except Exception as exc:
         checks["capabilities"] = False
         errors["capabilities"] = type(exc).__name__
-    checks["quarantine_vlan"] = bool(
-        current_app.config["QUARANTINE_VLAN_ID"] > 0
-        and isinstance(current_app.config["QUARANTINE_VLAN_EXISTS"], bool)
-        and isinstance(current_app.config["QUARANTINE_VLAN_ISOLATED"], bool)
-    )
+    try:
+        load_quarantine_vlan_id(current_app.config["REMEDIATION_CONFIG_PATH"])
+        checks["quarantine_vlan"] = bool(
+            isinstance(current_app.config["QUARANTINE_VLAN_EXISTS"], bool)
+            and isinstance(current_app.config["QUARANTINE_VLAN_ISOLATED"], bool)
+        )
+    except Exception as exc:
+        checks["quarantine_vlan"] = False
+        errors["quarantine_vlan"] = type(exc).__name__
     return jsonify(
         {
             "ok": all(checks.values()),

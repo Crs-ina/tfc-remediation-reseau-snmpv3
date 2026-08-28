@@ -29,6 +29,10 @@ from app.snmp.target_resolver import (
     TargetResolutionError,
     normalize_mac,
 )
+from app.snmp.value_formatting import (
+    format_if_admin_status,
+    format_if_oper_status,
+)
 
 from .audit import record_audit
 from .remediation import RemediationError, evaluate_incident
@@ -139,8 +143,8 @@ def inspect_physical_disconnection_with_snmp(
         details={
             "if_index": if_index,
             "interface_name": interface_name,
-            "if_admin_status": if_admin_status,
-            "if_oper_status": if_oper_status,
+            "if_admin_status": format_if_admin_status(if_admin_status),
+            "if_oper_status": format_if_oper_status(if_oper_status),
             "snmp_set_executed": False,
         },
     )
@@ -236,7 +240,7 @@ def prepare_port_incident_with_snmp(
         port_index=bridge_port, target_ip=target_ip, target_mac=target_mac,
         incident_type=incident.incident_type, action_type=decision.action, result_status=decision.state,
         details={"bridge_port": bridge_port, "if_index": if_index, "interface_name": interface_name,
-                 "previous_if_admin_status": previous_port_status, "previous_pvid": previous_pvid,
+                 "previous_if_admin_status": format_if_admin_status(previous_port_status), "previous_pvid": previous_pvid,
                  "t_identification_seconds": identification_seconds, "t_prechecks_seconds": prechecks_seconds},
     )
     db.session.commit()

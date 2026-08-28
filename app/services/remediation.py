@@ -18,6 +18,7 @@ from app.models import (
 from .audit import record_audit
 from .administrators import IdentityError, require_administrator
 from .calendar_policy import CalendarPolicy
+from .remediation_config import RemediationConfigError, load_quarantine_vlan_id
 from .rules import (
     PlaybookRepository,
     RuleContext,
@@ -97,6 +98,17 @@ def evaluate_incident(
             details={"attempt": identification_attempts, "maximum": 2},
         )
 
+    remediation_config_error: str | None = None
+    try:
+        quarantine_vlan_id = load_quarantine_vlan_id(
+            current_app.config["REMEDIATION_CONFIG_PATH"]
+        )
+        remediation_config_ready = True
+    except RemediationConfigError as exc:
+        quarantine_vlan_id = None
+        remediation_config_ready = False
+        remediation_config_error = str(exc)
+
     engine = RuleEngine(PlaybookRepository(current_app.config["PLAYBOOKS_DIR"]))
     decision = engine.evaluate(
         RuleContext(
@@ -106,7 +118,10 @@ def evaluate_incident(
             target_whitelisted=target_whitelisted,
             schedule=schedule,
             automatic_allowed_actions=policy.schedule.automatic_allowed_actions,
-            quarantine_vlan_exists=current_app.config["QUARANTINE_VLAN_EXISTS"],
+            quarantine_vlan_exists=(
+                current_app.config["QUARANTINE_VLAN_EXISTS"]
+                and remediation_config_ready
+            ),
             quarantine_vlan_isolated=current_app.config[
                 "QUARANTINE_VLAN_ISOLATED"
             ],
@@ -158,7 +173,8 @@ def evaluate_incident(
             "schedule_reason": schedule.reason,
             "holiday_name": schedule.holiday_name,
             "target_whitelisted": target_whitelisted,
-            "quarantine_vlan_id": current_app.config["QUARANTINE_VLAN_ID"],
+            "quarantine_vlan_id": quarantine_vlan_id,
+            "remediation_config_error": remediation_config_error,
             "quarantine_vlan_exists": current_app.config[
                 "QUARANTINE_VLAN_EXISTS"
             ],

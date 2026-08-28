@@ -269,5 +269,7 @@ def test_whitelist_and_schedule_are_external_configuration(tmp_path):
     }
 
 
-def test_quarantine_vlan_18_is_application_configuration(app):
-    assert app.config["QUARANTINE_VLAN_ID"] == 18
+def test_quarantine_vlan_18_is_external_remediation_configuration(app):
+    from app.services.remediation_config import load_quarantine_vlan_id
+
+    assert load_quarantine_vlan_id(app.config["REMEDIATION_CONFIG_PATH"]) == 18

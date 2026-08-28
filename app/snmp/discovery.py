@@ -7,6 +7,7 @@ from typing import Protocol
 
 from .client import SnmpClientError, SnmpUnsupportedObject
 from .mib_catalog import MIB_PROBES, SYS_UP_TIME, MibObjectRef
+from .value_formatting import format_mib_value
 
 
 class DiscoveryClient(Protocol):
@@ -44,7 +45,20 @@ class DiscoveryReport:
             "read_only": self.read_only,
             "connectivity": self.connectivity,
             "mibs": {
-                mib: [asdict(result) for result in results]
+                mib: [
+                    {
+                        **asdict(result),
+                        "sample_value": (
+                            format_mib_value(
+                                f"{mib}::{result.object_name}",
+                                result.sample_value,
+                            )
+                            if result.sample_value is not None
+                            else None
+                        ),
+                    }
+                    for result in results
+                ]
                 for mib, results in self.mibs.items()
             },
         }
@@ -62,7 +76,7 @@ async def discover_snmp_capabilities(
         uptime = await client.read_scalar(SYS_UP_TIME)
         connectivity: dict[str, str | None] = {
             "status": "SUPPORTED",
-            "sys_uptime": uptime,
+            "sys_uptime": format_mib_value(SYS_UP_TIME.key, uptime),
             "error": None,
         }
     except Exception as exc:

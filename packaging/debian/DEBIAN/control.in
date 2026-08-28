@@ -1,0 +1,10 @@
+Package: okapi
+Version: 1.0.0
+Section: net
+Priority: optional
+Architecture: @ARCHITECTURE@
+Depends: python3 (>= 3.10), python3-venv, sudo, adduser, tzdata
+Maintainer: Christina Ngalula <christinangalula@2028.ulc-icam.com>
+Description: OKAPI cautious SNMPv3 network remediation prototype
+ OKAPI receives Zabbix events, applies validation and safety policies,
+ records decisions in SQLite, and exposes an interactive administrator CLI.

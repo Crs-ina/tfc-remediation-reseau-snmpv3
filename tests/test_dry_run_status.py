@@ -57,7 +57,7 @@ def test_system_status_shows_dry_run_override(app, monkeypatch, capsys) -> None:
     assert values["SNMP writes"] == "BLOCKED BY DRY-RUN"
     assert values["Dry-run mode"] == "ON"
     assert values["Authorization mode"] == "SUPERVISED"
-    assert values["Quarantine VLAN"] == "18"
+    assert values["Quarantine VLAN"] == "VLAN 18"
     assert values["Remediation cooldown"] == "60 s"
 
 

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+umask 007
+export PYTHONPATH=/opt/okapi
+export OKAPI_CONFIG_DIR=/etc/okapi
+export OKAPI_STATE_DIR=/var/lib/okapi
+export OKAPI_ENV_FILE=/etc/okapi/okapi.env
+export OKAPI_SECRETS_ENV=/etc/okapi/secrets.env
+
+cd /opt/okapi
+exec /opt/okapi/venv/bin/flask --app run db upgrade

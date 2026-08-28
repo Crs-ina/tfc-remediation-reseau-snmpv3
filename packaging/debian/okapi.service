@@ -1,0 +1,35 @@
+[Unit]
+Description=OKAPI local Zabbix webhook backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=okapi
+Group=okapi
+WorkingDirectory=/opt/okapi
+Environment=PYTHONPATH=/opt/okapi
+Environment=OKAPI_CONFIG_DIR=/etc/okapi
+Environment=OKAPI_STATE_DIR=/var/lib/okapi
+Environment=OKAPI_ENV_FILE=/etc/okapi/okapi.env
+Environment=OKAPI_SECRETS_ENV=/etc/okapi/secrets.env
+EnvironmentFile=-/etc/okapi/okapi.env
+EnvironmentFile=-/etc/okapi/secrets.env
+ExecStartPre=/opt/okapi/bin/migrate-database
+ExecStart=/opt/okapi/venv/bin/gunicorn --workers 1 --bind 127.0.0.1:5000 run:app
+Restart=on-failure
+RestartSec=3
+UMask=0007
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/okapi
+ReadOnlyPaths=/opt/okapi /etc/okapi
+
+[Install]
+WantedBy=multi-user.target

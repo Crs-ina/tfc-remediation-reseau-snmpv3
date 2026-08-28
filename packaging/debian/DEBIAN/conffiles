@@ -1,0 +1,13 @@
+/etc/okapi/okapi.env
+/etc/okapi/remediation.json
+/etc/okapi/whitelist.json
+/etc/okapi/automation_schedule.json
+/etc/okapi/snmp_capabilities.json
+/etc/okapi/playbooks/PB-INTERFACE-DOWN-001.json
+/etc/okapi/playbooks/PB-IP-CONFLICT-001.json
+/etc/okapi/playbooks/PB-LOOP-001.json
+/etc/okapi/playbooks/PB-PHYSICAL-DOWN-001.json
+/etc/okapi/playbooks/PB-PORT-FLAPPING-001.json
+/etc/okapi/playbooks/PB-UNKNOWN-001.json
+/etc/okapi/playbooks/PB-VLAN-POLICY-001.json
+/etc/okapi/playbooks/playbook_index.json

@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
+from app.snmp.value_formatting import format_if_admin_status
 
 from .base import utc_now
 
@@ -87,8 +88,16 @@ class Remediation(db.Model):
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "status": self.status,
-            "previous_port_status": self.previous_port_status,
+            "previous_port_status": (
+                format_if_admin_status(self.previous_port_status)
+                if self.previous_port_status is not None
+                else None
+            ),
             "previous_vlan_id": self.previous_vlan_id,
-            "applied_port_status": self.applied_port_status,
+            "applied_port_status": (
+                format_if_admin_status(self.applied_port_status)
+                if self.applied_port_status is not None
+                else None
+            ),
             "applied_vlan_id": self.applied_vlan_id,
         }

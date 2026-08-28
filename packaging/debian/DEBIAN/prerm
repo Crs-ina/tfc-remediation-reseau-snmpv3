@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+if command -v systemctl >/dev/null 2>&1; then
+    case "${1:-}" in
+        remove|deconfigure)
+            systemctl stop okapi.service >/dev/null 2>&1 || true
+            systemctl disable okapi.service >/dev/null 2>&1 || true
+            ;;
+        upgrade)
+            if systemctl is-active --quiet okapi.service; then
+                : > /run/okapi-was-active
+                systemctl stop okapi.service >/dev/null 2>&1 || true
+            fi
+            ;;
+    esac
+fi
+
+exit 0

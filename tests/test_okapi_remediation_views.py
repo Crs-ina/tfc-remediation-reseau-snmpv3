@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from app.cli.okapi import _remediation_history, _rollback
 from app.extensions import db
@@ -162,3 +163,59 @@ def test_history_and_available_rollback_views_are_contextual(app, monkeypatch, c
         assert "RECOVERED_BEFORE_ACTION" not in rollback_view
         assert "previous admin status" not in rollback_view
         assert "Reason" not in rollback_view
+
+
+def test_interface_rollback_result_never_displays_raw_state(app, monkeypatch, capsys):
+    remediation = SimpleNamespace(
+        action_type="SHUTDOWN_PORT",
+        applied_port_status="DOWN",
+        previous_port_status="1",
+        applied_vlan_id=None,
+        previous_vlan_id=None,
+        authorization_mode="SUPERVISED",
+        start_time=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        switch_port=None,
+        target_host=None,
+        port_index=2,
+    )
+    monkeypatch.setattr("app.cli.okapi.available_rollbacks", lambda: [remediation])
+    monkeypatch.setattr("app.cli.okapi._remediation_actor_label", lambda _item: "Approved by : alice")
+    monkeypatch.setattr("app.cli.okapi.click.prompt", lambda *_args, **_kwargs: "1")
+    monkeypatch.setattr("app.cli.okapi.reauthenticate_for_critical_action", lambda *_args: None)
+    monkeypatch.setattr("app.cli.okapi.rollback_snmp_action", lambda *_args, **_kwargs: 1)
+    monkeypatch.setattr("app.cli.okapi.is_dry_run_enabled", lambda: False)
+
+    with app.app_context():
+        _rollback(Administrator(system_username="alice"))
+
+    output = capsys.readouterr().out
+    assert "Rollback succeeded. Restored state: UP" in output
+    assert "Restored value: 1" not in output
+
+
+def test_vlan_rollback_result_names_the_restored_vlan(app, monkeypatch, capsys):
+    remediation = SimpleNamespace(
+        action_type="QUARANTINE_VLAN",
+        applied_port_status=None,
+        previous_port_status=None,
+        applied_vlan_id=18,
+        previous_vlan_id=10,
+        authorization_mode="SUPERVISED",
+        start_time=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        switch_port=None,
+        target_host=None,
+        port_index=2,
+    )
+    monkeypatch.setattr("app.cli.okapi.available_rollbacks", lambda: [remediation])
+    monkeypatch.setattr("app.cli.okapi._remediation_actor_label", lambda _item: "Approved by : alice")
+    monkeypatch.setattr("app.cli.okapi.click.prompt", lambda *_args, **_kwargs: "1")
+    monkeypatch.setattr("app.cli.okapi.reauthenticate_for_critical_action", lambda *_args: None)
+    monkeypatch.setattr("app.cli.okapi.rollback_snmp_action", lambda *_args, **_kwargs: 10)
+    monkeypatch.setattr("app.cli.okapi.is_dry_run_enabled", lambda: False)
+
+    with app.app_context():
+        _rollback(Administrator(system_username="alice"))
+
+    output = capsys.readouterr().out
+    assert "Rollback succeeded. Restored VLAN: 10" in output
+    assert "Restored value: 10" not in output

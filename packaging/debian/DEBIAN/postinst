@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+if ! getent group okapi >/dev/null; then
+    addgroup --system okapi
+fi
+
+if ! getent passwd okapi >/dev/null; then
+    adduser --system --ingroup okapi --home /var/lib/okapi \
+        --no-create-home --disabled-login --disabled-password okapi
+fi
+
+install -d -m 2770 -o okapi -g okapi /var/lib/okapi
+install -d -m 2770 -o okapi -g okapi /var/lib/okapi/port-locks
+
+if [ ! -e /etc/okapi/secrets.env ]; then
+    install -m 0640 -o root -g okapi /dev/null /etc/okapi/secrets.env
+fi
+chown root:okapi /etc/okapi/secrets.env
+chmod 0640 /etc/okapi/secrets.env
+
+python3 -m venv --clear /opt/okapi/venv
+/opt/okapi/venv/bin/python -m pip install \
+    --disable-pip-version-check \
+    --no-index \
+    --find-links /opt/okapi/wheels \
+    --requirement /opt/okapi/requirements-runtime.txt
+
+chown -R root:root /opt/okapi
+chmod -R go-w /opt/okapi
+
+if runuser -u okapi -- /opt/okapi/bin/migrate-database; then
+    if [ -e /var/lib/okapi/remediation.db ]; then
+        chown okapi:okapi /var/lib/okapi/remediation.db
+        chmod 0660 /var/lib/okapi/remediation.db
+    fi
+else
+    echo "OKAPI database migration failed; service was not started." >&2
+    exit 1
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+    if [ -e /run/okapi-was-active ] && [ -s /etc/okapi/secrets.env ]; then
+        systemctl restart okapi.service || true
+        rm -f /run/okapi-was-active
+    fi
+fi
+
+exit 0
