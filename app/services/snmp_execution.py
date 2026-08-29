@@ -302,12 +302,6 @@ def execute_interface_admin_action(
         _block_execution(incident, remediation, "port_became_whitelisted")
     if is_dry_run_enabled():
         return _dry_run_result(incident, remediation, expected)
-    _block_execution(
-        incident,
-        remediation,
-        "IF-MIB::ifAdminStatus write is TO_BE_VALIDATED; only dot1qPvid is LAB_VALIDATED.",
-        status="BLOCKED_SNMP_CAPABILITY",
-    )
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         _block_execution(incident, remediation, "SNMP_WRITE_ENABLED=false")
     _enforce_cooldown(incident, remediation)
@@ -611,12 +605,6 @@ def rollback_interface_admin_action(
             previous,
             administrator_id=administrator_id,
         )
-    _block_execution(
-        incident,
-        remediation,
-        "IF-MIB::ifAdminStatus rollback is TO_BE_VALIDATED; only dot1qPvid is LAB_VALIDATED.",
-        status="BLOCKED_SNMP_CAPABILITY",
-    )
     if not current_app.config["SNMP_WRITE_ENABLED"]:
         _block_execution(incident, remediation, "SNMP_WRITE_ENABLED=false")
     registry: MibRegistry = current_app.extensions["snmp_mib_registry"]
