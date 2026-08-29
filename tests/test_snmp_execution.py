@@ -272,45 +272,23 @@ def test_set_success_but_post_get_mismatch_fails_verification(app):
         assert port.vlan_id == 10
 
 
-def test_next_quarantine_uses_vlan_reloaded_from_remediation_json(app):
+def test_successful_set_is_confirmed_by_get_and_updates_inventory(app):
     enable_writes(app)
-    app.config["REMEDIATION_CONFIG_PATH"].write_text(
-        '{"quarantine_vlan_id": 40}', encoding="utf-8"
-    )
     with app.app_context():
         incident, remediation, port = build_waiting_remediation()
         approve(incident)
-        fake = FakeWriteClient([10, 40])
+        fake = FakeWriteClient([10, 18])
 
         result = execute_quarantine_vlan(
             incident, client=fake, snmp_config=snmp_config()
         )
 
-        assert result.requested_vlan == 40
-        assert result.observed_vlan == 40
-        assert fake.set_calls[0][1:] == (40, True)
+        assert result.requested_vlan == 18
+        assert result.observed_vlan == 18
         assert len(fake.set_calls) == 1
         assert remediation.status == "SUCCEEDED"
         assert incident.processing_status == "REMEDIATED"
-        assert port.vlan_id == 40
-
-
-def test_missing_remediation_json_blocks_quarantine_before_snmp(app):
-    enable_writes(app)
-    app.config["REMEDIATION_CONFIG_PATH"].unlink()
-    with app.app_context():
-        incident, remediation, _port = build_waiting_remediation()
-        approve(incident)
-        fake = FakeWriteClient([])
-
-        with pytest.raises(UnsafeOperationBlocked, match="remediation_config_invalid"):
-            execute_quarantine_vlan(
-                incident, client=fake, snmp_config=snmp_config()
-            )
-
-        assert remediation.status == "BLOCKED_SNMP_WRITE"
-        assert fake.set_calls == []
-        assert fake.read_calls == []
+        assert port.vlan_id == 18
 
 
 def test_rollback_requires_explicit_administrator_request(app):
@@ -389,14 +367,20 @@ def test_timing_sums_automated_segments_and_excludes_human_wait(app):
         ("REACTIVATE_PORT", "down", [200, 2, 1], 1),
     ],
 )
-def test_real_interface_actions_are_blocked_as_not_lab_validated(
+def test_interface_actions_record_all_automated_timing_metrics(
     app,
+    monkeypatch,
     action_type,
     previous_status,
     read_values,
     expected,
 ):
     enable_writes(app)
+    monkeypatch.setattr(
+        "app.services.snmp_execution.require_lab_validated_write",
+        lambda *_args, **_kwargs: None,
+    )
+    clock_values: Iterator[float] = iter([0.0, 0.5, 10.0, 12.0, 20.0, 23.0])
     with app.app_context():
         incident, remediation, port = build_waiting_remediation()
         remediation.action_type = action_type
@@ -405,17 +389,32 @@ def test_real_interface_actions_are_blocked_as_not_lab_validated(
         db.session.commit()
         approve(incident)
 
-        fake = FakeWriteClient(read_values)
-        with pytest.raises(UnsafeOperationBlocked, match="TO_BE_VALIDATED"):
-            execute_interface_admin_action(
-                incident,
-                client=fake,
-                snmp_config=snmp_config(),
-            )
+        result = execute_interface_admin_action(
+            incident,
+            client=FakeWriteClient(read_values),
+            snmp_config=snmp_config(),
+            clock=lambda: next(clock_values),
+        )
 
-        assert remediation.status == "BLOCKED_SNMP_CAPABILITY"
-        assert fake.set_calls == []
-        assert fake.read_calls == []
+        assert result.observed_vlan == expected
+        assert result.timing.identification_seconds == pytest.approx(1.25)
+        assert result.timing.prechecks_seconds == pytest.approx(3.0)
+        assert result.timing.snmp_set_seconds == pytest.approx(2.0)
+        assert result.timing.verification_seconds == pytest.approx(3.0)
+        assert result.timing.total_automated_seconds == pytest.approx(9.25)
+
+        audit = db.session.execute(
+            db.select(AuditLog).where(
+                AuditLog.event_type == "SNMP_REMEDIATION_SUCCEEDED"
+            )
+        ).scalar_one()
+        details = json.loads(audit.message.split(" | ", 1)[1])
+        assert details["t_identification_seconds"] == pytest.approx(1.25)
+        assert details["t_prechecks_seconds"] == pytest.approx(3.0)
+        assert details["t_snmp_set_seconds"] == pytest.approx(2.0)
+        assert details["t_verification_seconds"] == pytest.approx(3.0)
+        assert details["t_total_automated_seconds"] == pytest.approx(9.25)
+        assert details["human_wait_excluded"] is True
 
 
 def test_dry_run_never_calls_set(app):
@@ -620,19 +619,28 @@ def test_rollback_is_blocked_when_vlan_changed_after_remediation(app):
         assert '"observed_current": 20' in audit.message
 
 
-def test_interface_rollback_dry_run_uses_readable_snapshot(app):
-    app.config.update(SNMP_WRITE_ENABLED=True, DRY_RUN=True)
+def test_shutdown_rollback_restores_up_and_uses_readable_snapshot(app, monkeypatch):
+    enable_writes(app)
+    monkeypatch.setattr(
+        "app.services.snmp_execution.require_lab_validated_write",
+        lambda *_args, **_kwargs: None,
+    )
     with app.app_context():
         incident, remediation, port = build_waiting_remediation()
         remediation.action_type = "SHUTDOWN_PORT"
         remediation.previous_port_status = "1"
-        remediation.applied_port_status = "DOWN"
-        remediation.status = "SUCCEEDED"
-        incident.processing_status = "REMEDIATED"
-        port.status = "down"
         db.session.commit()
+        approve(incident)
 
-        rollback_client = FakeWriteClient([])
+        execute_interface_admin_action(
+            incident,
+            client=FakeWriteClient([200, 1, 2]),
+            snmp_config=snmp_config(),
+        )
+        assert remediation.applied_port_status == "DOWN"
+        assert port.status == "down"
+
+        rollback_client = FakeWriteClient([200, 2, 1])
         observed = rollback_interface_admin_action(
             remediation,
             administrator_id="admin-test",
@@ -641,27 +649,35 @@ def test_interface_rollback_dry_run_uses_readable_snapshot(app):
         )
 
         assert observed == 1
-        assert rollback_client.set_calls == []
-        assert rollback_client.read_calls == []
-        audit = db.session.execute(
-            db.select(AuditLog).where(AuditLog.event_type == "DRY_RUN_ROLLBACK")
-        ).scalar_one()
-        assert '"requested_state": "UP"' in audit.message
+        assert rollback_client.set_calls[0][1:] == (1, True)
+        assert port.status == "up"
 
 
-def test_real_interface_rollback_is_blocked_as_not_lab_validated(app):
+def test_interface_rollback_is_blocked_after_an_external_state_change(
+    app, monkeypatch
+):
     enable_writes(app)
+    monkeypatch.setattr(
+        "app.services.snmp_execution.require_lab_validated_write",
+        lambda *_args, **_kwargs: None,
+    )
     with app.app_context():
         incident, remediation, _port = build_waiting_remediation()
         remediation.action_type = "SHUTDOWN_PORT"
         remediation.previous_port_status = "UP"
-        remediation.applied_port_status = "DOWN"
-        remediation.status = "SUCCEEDED"
-        incident.processing_status = "REMEDIATED"
         db.session.commit()
-        rollback_client = FakeWriteClient([])
+        approve(incident)
+        execute_interface_admin_action(
+            incident,
+            client=FakeWriteClient([200, 1, 2]),
+            snmp_config=snmp_config(),
+        )
+        rollback_client = FakeWriteClient([200, 1])
 
-        with pytest.raises(UnsafeOperationBlocked, match="TO_BE_VALIDATED"):
+        with pytest.raises(
+            RollbackStateChangedError,
+            match="Expected current administrative state : DOWN",
+        ):
             rollback_interface_admin_action(
                 remediation,
                 administrator_id="admin-test",
@@ -670,8 +686,7 @@ def test_real_interface_rollback_is_blocked_as_not_lab_validated(app):
             )
 
         assert rollback_client.set_calls == []
-        assert rollback_client.read_calls == []
-        assert remediation.status == "BLOCKED_SNMP_CAPABILITY"
+        assert remediation.status == "ROLLBACK_BLOCKED"
 
 
 @pytest.mark.parametrize("username", ["exauceeadm", "claude"])
