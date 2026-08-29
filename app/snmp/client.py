@@ -16,6 +16,7 @@ warnings.filterwarnings(
 
 from .mib_catalog import (
     DOT1Q_PVID,
+    IF_ADMIN_STATUS,
     MibObjectRef,
 )
 from .mib_registry import MibRegistry
@@ -253,7 +254,10 @@ class SnmpRemediationClient(SnmpReadClient):
         # Absolute transport boundary: only explicitly controlled objects
         # may reach PySNMP SET. The capability gate upstream still decides
         # whether an object is qualified for normal remediation.
-        allowed_objects = {DOT1Q_PVID.key}
+        allowed_objects = {
+            DOT1Q_PVID.key,
+            IF_ADMIN_STATUS.key,
+        }
         if object_ref.key not in allowed_objects or not object_ref.indices:
             raise SnmpWriteBlocked(
                 f"Object not enabled for a controlled SET: {object_ref.key}"
