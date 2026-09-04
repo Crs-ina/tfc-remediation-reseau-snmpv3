@@ -52,7 +52,7 @@ Les fichiers ou ensembles existants inspectés pendant la mission sont :
 
 - le cahier de mission
   `C:\Users\ngalu\Downloads\MISSION_CODEX_MIB_SNMP_REMEDIATION.md` ;
-- `README.md`, `.env.example`, `.gitignore`, `requirements.txt`, `config.py` et
+- `README.md`, `.env.example`, `.gitignore`, `requirements-dev.txt`, `config.py` et
   `run.py` ;
 - `app/__init__.py`, `app/extensions.py` et `app/routes/health.py` ;
 - `app/snmp/client.py`, `app/snmp/discovery.py`,
@@ -246,7 +246,7 @@ vérifie que le total reste la somme des durées actives. L’objectif inférieu
 - `AGENTS.md` : état actuel de la découverte et de la remédiation SNMPv3 ;
 - `README.md` : installation, sécurité, cache, workflow et intégration ;
 - `config.py` : configuration MIB et capacités ;
-- `requirements.txt` : paquet MIB précompilé ;
+- `requirements-dev.txt` : paquet MIB précompilé ;
 - `app/__init__.py` : warm-up du registre MIB ;
 - `app/routes/health.py` : état de préparation MIB ;
 - `app/cli/snmp.py` : injection du registre MIB dans la découverte ;
