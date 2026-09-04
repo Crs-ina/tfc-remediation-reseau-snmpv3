@@ -665,6 +665,9 @@ def _history_reason(record: HistoryRecord) -> str | None:
 
 
 def _display_history(records: list[HistoryRecord]) -> None:
+    # Incident & Action History must contain only records linked to incidents.
+    # Administrative/session audit events remain in the audit database.
+    records = [record for record in records if record.incident is not None]
     count = len(records)
     label = "entry" if count == 1 else "entries"
     click.echo(f"\nOKAPI - INCIDENT & ACTION HISTORY ({count} {label})")
