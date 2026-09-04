@@ -1,6 +1,0 @@
-Citation 1 — Pour justifier la nécessité d'une réponse aux incidents :
-L'Executive Summary explique que les incidents de sécurité informatique sont de plus en plus nombreux, diversifiés et dommageables, rendant une capacité de réponse aux incidents indispensable pour détecter rapidement les brèches, minimiser les pertes et restaurer les services.
-Citation 2 — Pour justifier l'automatisation :
-La section 3.2 indique que des millions de signes d'incidents peuvent se produire chaque jour dans une organisation, et que l'automatisation est nécessaire pour effectuer une analyse initiale des données et sélectionner les événements d'intérêt pour une revue humaine.
-Citation 3 — Pour ton cycle de vie de remédiation :
-Le document définit un cycle de vie en 4 phases : Préparation → Détection & Analyse → Confinement/Éradication/Récupération → Activité post-incident — que tu peux directement utiliser comme cadre théorique dans ton Chapitre I.
