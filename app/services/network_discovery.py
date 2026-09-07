@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import dataclass
 
 from flask import current_app
@@ -23,20 +22,13 @@ class NetworkDiscoveryError(RuntimeError):
     pass
 
 
-def _identify_switch_model(sys_descr: str) -> str | None:
-    """Derive a qualified platform name from the SNMP sysDescr value."""
+def _derive_switch_descriptor(sys_descr: str) -> str | None:
+    """Keep the SNMP-reported platform description without vendor-specific rules."""
 
-    arista = re.search(
-        r"Arista Networks EOS version\s+([^\s]+).*Arista vEOS-lab",
-        sys_descr,
-        flags=re.IGNORECASE,
-    )
-
-    if arista:
-        return f"Arista vEOS {arista.group(1)}"
-
-    # Unknown platforms remain unqualified: SNMP writes will fail closed.
-    return None
+    normalized = " ".join(sys_descr.split()).strip()
+    if not normalized:
+        return None
+    return normalized[:128]
 
 
 @dataclass(frozen=True)
@@ -57,7 +49,8 @@ def discover_switch(
     Confirm the network switch through SNMPv3.
 
     Zabbix supplies the management IP, but the switch identity itself is
-    independently confirmed through SNMP sysName.
+    independently confirmed through SNMP sysName. The platform description is
+    recorded directly from sysDescr and is never used to authorize a write.
     """
 
     registry = current_app.extensions["snmp_mib_registry"]
@@ -94,7 +87,7 @@ def discover_switch(
             )
         ).strip()
 
-        detected_model = _identify_switch_model(sys_descr)
+        detected_model = _derive_switch_descriptor(sys_descr)
 
     except Exception as exc:
         raise NetworkDiscoveryError(
@@ -146,7 +139,7 @@ def discover_switch(
         created = True
 
     else:
-        # SNMP independently confirms both identity and platform.
+        # SNMP independently confirms identity and records the reported platform.
         switch.name = sys_name
         switch.model = detected_model
 
