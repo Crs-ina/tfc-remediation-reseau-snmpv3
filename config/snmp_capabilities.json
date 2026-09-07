@@ -1,5 +1,16 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "write_policy": {
+    "scope": "vendor-neutral SNMPv3 write policy for the OIDs validated by OKAPI",
+    "security": {
+      "auth_protocol": "SHA256",
+      "priv_protocol": "AES256"
+    },
+    "objects": {
+      "IF-MIB::ifAdminStatus": {"write": "LAB_VALIDATED"},
+      "Q-BRIDGE-MIB::dot1qPvid": {"write": "LAB_VALIDATED"}
+    }
+  },
   "platforms": {
     "Arista vEOS 4.29.2F": {
       "scope": "EVE-NG laboratory only",
