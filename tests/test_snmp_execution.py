@@ -65,7 +65,7 @@ class FakeWriteClient:
 
 def build_waiting_remediation(
     *,
-    model: str = "Arista vEOS 4.29.2F",
+    model: str | None = "Arista vEOS 4.29.2F",
     prepared: bool = True,
 ) -> tuple[Incident, Remediation, SwitchPort]:
     network_switch = NetworkSwitch(
@@ -202,20 +202,23 @@ def test_missing_mib_blocks_before_set(app):
         assert fake.read_calls == []
 
 
-def test_unvalidated_unifi_capability_blocks_before_set(app):
+@pytest.mark.parametrize("model", ["platform-a", "platform-b", None])
+def test_switch_model_metadata_does_not_block_allowed_set(app, model):
     enable_writes(app)
     with app.app_context():
-        incident, _remediation, _port = build_waiting_remediation(model="UniFi")
+        incident, remediation, port = build_waiting_remediation(model=model)
         approve(incident)
         fake = FakeWriteClient([10, 18])
 
-        with pytest.raises(UnsafeOperationBlocked, match="capability_blocked"):
-            execute_quarantine_vlan(
-                incident, client=fake, snmp_config=snmp_config()
-            )
+        result = execute_quarantine_vlan(
+            incident, client=fake, snmp_config=snmp_config()
+        )
 
-        assert fake.set_calls == []
-        assert fake.read_calls == []
+        assert result.requested_vlan == 18
+        assert result.observed_vlan == 18
+        assert len(fake.set_calls) == 1
+        assert remediation.status == "SUCCEEDED"
+        assert port.vlan_id == 18
 
 
 def test_whitelist_is_rechecked_after_approval_and_blocks_set(
