@@ -11,86 +11,48 @@ class CapabilityError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class PlatformCapabilities:
-    model: str
+class SnmpWritePolicy:
     scope: str
     auth_protocol: str
     priv_protocol: str
     objects: dict[str, dict[str, str]]
 
     def write_status(self, symbolic_name: str) -> str:
-        return self.objects.get(symbolic_name, {}).get("write", "TO_BE_VALIDATED")
+        return self.objects.get(symbolic_name, {}).get("write", "DENIED")
 
 
 @lru_cache(maxsize=8)
-def load_capabilities(path: Path) -> dict[str, PlatformCapabilities]:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    result: dict[str, PlatformCapabilities] = {}
-    for model, definition in data["platforms"].items():
-        security = definition["security"]
-        result[model] = PlatformCapabilities(
-            model=model,
-            scope=str(definition["scope"]),
-            auth_protocol=str(security["auth_protocol"]),
-            priv_protocol=str(security["priv_protocol"]),
-            objects=dict(definition["objects"]),
-        )
-    return result
-
-
-@lru_cache(maxsize=8)
-def load_write_policy(path: Path) -> PlatformCapabilities:
+def load_write_policy(path: Path) -> SnmpWritePolicy:
     """Load the vendor-neutral SNMP write policy.
 
-    The platform profiles remain available for inventory and explicit safety
-    exceptions, but an unknown model is no longer rejected merely because it
-    is absent from the platform list. Older capability files without
-    ``write_policy`` are supported by deriving the generic policy from their
-    LAB_VALIDATED objects.
+    Runtime authorization is based only on the requested MIB object and the
+    configured SNMPv3 security profile. Equipment brand and model are not part
+    of the authorization decision.
     """
 
-    path = Path(path)
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
     definition = data.get("write_policy")
+    if not isinstance(definition, dict):
+        raise CapabilityError("Missing write_policy in SNMP capabilities file.")
 
-    if definition is not None:
-        security = definition["security"]
-        return PlatformCapabilities(
-            model="GENERIC_SNMPV3",
-            scope=str(definition["scope"]),
-            auth_protocol=str(security["auth_protocol"]),
-            priv_protocol=str(security["priv_protocol"]),
-            objects=dict(definition["objects"]),
-        )
+    security = definition.get("security")
+    objects = definition.get("objects")
+    if not isinstance(security, dict) or not isinstance(objects, dict):
+        raise CapabilityError("Invalid SNMP write policy structure.")
 
-    validated_objects: dict[str, dict[str, str]] = {}
-    protocol_pairs: set[tuple[str, str]] = set()
-
-    for platform in load_capabilities(path).values():
-        for symbolic_name, object_capability in platform.objects.items():
-            if object_capability.get("write") != "LAB_VALIDATED":
-                continue
-            validated_objects[symbolic_name] = dict(object_capability)
-            protocol_pairs.add((platform.auth_protocol, platform.priv_protocol))
-
-    if not validated_objects:
-        raise CapabilityError(
-            "No LAB_VALIDATED SNMP write objects are configured."
-        )
-    if len(protocol_pairs) != 1:
-        raise CapabilityError(
-            "Legacy capability profiles contain incompatible SNMP security settings; "
-            "define a top-level write_policy."
-        )
-
-    auth_protocol, priv_protocol = next(iter(protocol_pairs))
-    return PlatformCapabilities(
-        model="GENERIC_SNMPV3",
-        scope="Derived vendor-neutral policy from LAB_VALIDATED objects",
-        auth_protocol=auth_protocol,
-        priv_protocol=priv_protocol,
-        objects=validated_objects,
+    return SnmpWritePolicy(
+        scope=str(definition.get("scope", "vendor-neutral SNMPv3 write policy")),
+        auth_protocol=str(security.get("auth_protocol", "")),
+        priv_protocol=str(security.get("priv_protocol", "")),
+        objects=dict(objects),
     )
+
+
+@lru_cache(maxsize=8)
+def load_capabilities(path: Path) -> dict[str, SnmpWritePolicy]:
+    """Compatibility wrapper used by the health endpoint."""
+
+    return {"write_policy": load_write_policy(Path(path))}
 
 
 def require_lab_validated_write(
@@ -100,43 +62,26 @@ def require_lab_validated_write(
     symbolic_name: str,
     auth_protocol: str,
     priv_protocol: str,
-) -> PlatformCapabilities:
-    """Authorize a SET from object/security capabilities instead of a model whitelist.
+) -> SnmpWritePolicy:
+    """Authorize a SET from object/security capabilities, never from a model list.
 
-    A model does not have to exist in ``platforms`` anymore. If a known platform
-    is explicitly present and the requested object is still marked
-    ``TO_BE_VALIDATED`` (or otherwise not LAB_VALIDATED), that explicit safety
-    information remains authoritative and the SET is blocked.
+    ``model`` remains in the signature only to preserve existing callers. It is
+    inventory metadata and is deliberately ignored for authorization.
     """
 
-    path = Path(path)
-    platforms = load_capabilities(path)
-    known_platform = platforms.get(model) if model else None
+    _ = model
+    policy = load_write_policy(Path(path))
 
-    if known_platform is not None:
-        object_definition = known_platform.objects.get(symbolic_name)
-        if (
-            object_definition is not None
-            and object_definition.get("write", "TO_BE_VALIDATED") != "LAB_VALIDATED"
-        ):
-            raise CapabilityError(
-                f"Write capability is explicitly not LAB_VALIDATED for {model}: "
-                f"{symbolic_name}"
-            )
-
-    policy = load_write_policy(path)
-
-    if policy.write_status(symbolic_name) != "LAB_VALIDATED":
+    if policy.write_status(symbolic_name) != "ALLOWED":
         raise CapabilityError(
-            f"Write capability is not LAB_VALIDATED by the generic SNMP policy: "
-            f"{symbolic_name}"
+            f"SNMP write is not allowed by policy for object: {symbolic_name}"
         )
     if (
         policy.auth_protocol != auth_protocol
         or policy.priv_protocol != priv_protocol
     ):
         raise CapabilityError(
-            "SNMP protocols do not match the validated write policy "
+            "SNMP protocols do not match the configured write policy "
             f"({policy.auth_protocol}/{policy.priv_protocol})."
         )
     return policy
