@@ -42,10 +42,11 @@ def load_capabilities(path: Path) -> dict[str, PlatformCapabilities]:
 def load_write_policy(path: Path) -> PlatformCapabilities:
     """Load the vendor-neutral SNMP write policy.
 
-    The platform profiles remain available for inventory and validation evidence,
-    but they no longer decide whether a runtime SET is authorized.  Older
-    capability files without ``write_policy`` are supported by deriving the
-    generic policy from their LAB_VALIDATED objects.
+    The platform profiles remain available for inventory and explicit safety
+    exceptions, but an unknown model is no longer rejected merely because it
+    is absent from the platform list. Older capability files without
+    ``write_policy`` are supported by deriving the generic policy from their
+    LAB_VALIDATED objects.
     """
 
     path = Path(path)
@@ -70,9 +71,7 @@ def load_write_policy(path: Path) -> PlatformCapabilities:
             if object_capability.get("write") != "LAB_VALIDATED":
                 continue
             validated_objects[symbolic_name] = dict(object_capability)
-            protocol_pairs.add(
-                (platform.auth_protocol, platform.priv_protocol)
-            )
+            protocol_pairs.add((platform.auth_protocol, platform.priv_protocol))
 
     if not validated_objects:
         raise CapabilityError(
@@ -102,15 +101,30 @@ def require_lab_validated_write(
     auth_protocol: str,
     priv_protocol: str,
 ) -> PlatformCapabilities:
-    """Authorize a SET from the configured object/security policy, not the model.
+    """Authorize a SET from object/security capabilities instead of a model whitelist.
 
-    ``model`` is intentionally retained in the function signature so existing
-    callers remain compatible.  It is inventory metadata only and is not used
-    as an authorization criterion.
+    A model does not have to exist in ``platforms`` anymore. If a known platform
+    is explicitly present and the requested object is still marked
+    ``TO_BE_VALIDATED`` (or otherwise not LAB_VALIDATED), that explicit safety
+    information remains authoritative and the SET is blocked.
     """
 
-    _ = model
-    policy = load_write_policy(Path(path))
+    path = Path(path)
+    platforms = load_capabilities(path)
+    known_platform = platforms.get(model) if model else None
+
+    if known_platform is not None:
+        object_definition = known_platform.objects.get(symbolic_name)
+        if (
+            object_definition is not None
+            and object_definition.get("write", "TO_BE_VALIDATED") != "LAB_VALIDATED"
+        ):
+            raise CapabilityError(
+                f"Write capability is explicitly not LAB_VALIDATED for {model}: "
+                f"{symbolic_name}"
+            )
+
+    policy = load_write_policy(path)
 
     if policy.write_status(symbolic_name) != "LAB_VALIDATED":
         raise CapabilityError(
