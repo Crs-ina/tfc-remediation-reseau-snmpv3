@@ -11,7 +11,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models import AuditLog, Incident, NetworkSwitch, Remediation, SwitchPort
-from app.snmp.capabilities import CapabilityError, require_lab_validated_write
+from app.snmp.capabilities import CapabilityError, require_snmp_write_allowed
 from app.snmp.client import (
     SnmpClientError,
     SnmpRemediationClient,
@@ -108,7 +108,7 @@ def execute_quarantine_vlan(
     remediation = _targeted_remediation(incident)
     administrator_id = _required_execution_administrator_id(remediation)
     if remediation.action_type != "QUARANTINE_VLAN":
-        _block_execution(incident, remediation, "action_not_lab_validated")
+        _block_execution(incident, remediation, "action_not_supported_by_write_path")
 
     network_switch = db.session.get(NetworkSwitch, remediation.switch_id)
     if network_switch is None:
@@ -157,7 +157,7 @@ def execute_quarantine_vlan(
         host=network_switch.management_ip
     )
     try:
-        require_lab_validated_write(
+        require_snmp_write_allowed(
             current_app.config["SNMP_CAPABILITIES_PATH"],
             model=network_switch.model,
             symbolic_name=DOT1Q_PVID.key,
@@ -310,7 +310,7 @@ def execute_interface_admin_action(
         _block_execution(incident, remediation, "mib_not_ready")
     effective_config = snmp_config or SnmpV3Config.from_env(host=network_switch.management_ip)
     try:
-        require_lab_validated_write(
+        require_snmp_write_allowed(
             current_app.config["SNMP_CAPABILITIES_PATH"], model=network_switch.model,
             symbolic_name=IF_ADMIN_STATUS.key, auth_protocol=effective_config.auth_protocol,
             priv_protocol=effective_config.priv_protocol,
@@ -459,7 +459,7 @@ def rollback_quarantine_vlan(
         host=network_switch.management_ip
     )
     try:
-        require_lab_validated_write(
+        require_snmp_write_allowed(
             current_app.config["SNMP_CAPABILITIES_PATH"],
             model=network_switch.model,
             symbolic_name=DOT1Q_PVID.key,
@@ -616,7 +616,7 @@ def rollback_interface_admin_action(
         )
     effective_config = snmp_config or SnmpV3Config.from_env(host=network_switch.management_ip)
     try:
-        require_lab_validated_write(current_app.config["SNMP_CAPABILITIES_PATH"], model=network_switch.model,
+        require_snmp_write_allowed(current_app.config["SNMP_CAPABILITIES_PATH"], model=network_switch.model,
                                     symbolic_name=IF_ADMIN_STATUS.key, auth_protocol=effective_config.auth_protocol,
                                     priv_protocol=effective_config.priv_protocol)
     except CapabilityError as exc:

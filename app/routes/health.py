@@ -56,7 +56,7 @@ def health():
             "ok": all(checks.values()),
             "service": "OKAPI",
             "architecture": "monolithe_modulaire_flask",
-            "snmp_policy": "read_only_discovery_lab_validated_writes_only",
+            "snmp_policy": "read_only_discovery_vendor_neutral_controlled_writes",
             "mib_ready": bool(mib_status and mib_status.ready),
             "mib_package": mib_status.package if mib_status else None,
             "mib_resolved_objects": (

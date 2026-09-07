@@ -380,7 +380,7 @@ def test_interface_actions_record_all_automated_timing_metrics(
 ):
     enable_writes(app)
     monkeypatch.setattr(
-        "app.services.snmp_execution.require_lab_validated_write",
+        "app.services.snmp_execution.require_snmp_write_allowed",
         lambda *_args, **_kwargs: None,
     )
     clock_values: Iterator[float] = iter([0.0, 0.5, 10.0, 12.0, 20.0, 23.0])
@@ -625,7 +625,7 @@ def test_rollback_is_blocked_when_vlan_changed_after_remediation(app):
 def test_shutdown_rollback_restores_up_and_uses_readable_snapshot(app, monkeypatch):
     enable_writes(app)
     monkeypatch.setattr(
-        "app.services.snmp_execution.require_lab_validated_write",
+        "app.services.snmp_execution.require_snmp_write_allowed",
         lambda *_args, **_kwargs: None,
     )
     with app.app_context():
@@ -661,7 +661,7 @@ def test_interface_rollback_is_blocked_after_an_external_state_change(
 ):
     enable_writes(app)
     monkeypatch.setattr(
-        "app.services.snmp_execution.require_lab_validated_write",
+        "app.services.snmp_execution.require_snmp_write_allowed",
         lambda *_args, **_kwargs: None,
     )
     with app.app_context():

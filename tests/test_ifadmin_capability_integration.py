@@ -23,7 +23,7 @@ from tests.test_snmp_execution import (
         ("REACTIVATE_PORT", "DOWN", "down", [200, 2, 1], 1),
     ],
 )
-def test_arista_lab_validated_ifadmin_actions_execute_without_capability_bypass(
+def test_vendor_neutral_ifadmin_actions_execute_without_capability_bypass(
     app,
     action_type,
     previous_status,

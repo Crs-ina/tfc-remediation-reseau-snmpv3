@@ -9,7 +9,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models import Incident, NetworkHost, NetworkSwitch, SwitchPort
-from app.snmp.capabilities import CapabilityError, require_lab_validated_write
+from app.snmp.capabilities import CapabilityError, require_snmp_write_allowed
 from app.snmp.client import SnmpReadClient, SnmpV3Config
 from app.snmp.mib_catalog import (
     DOT1D_BASE_PORT_IF_INDEX,
@@ -291,7 +291,7 @@ def prepare_incident_with_snmp(
         host=network_switch.management_ip
     )
     try:
-        require_lab_validated_write(
+        require_snmp_write_allowed(
             current_app.config["SNMP_CAPABILITIES_PATH"],
             model=network_switch.model,
             symbolic_name=DOT1Q_PVID.key,

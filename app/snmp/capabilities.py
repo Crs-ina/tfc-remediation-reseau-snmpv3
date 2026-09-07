@@ -55,7 +55,7 @@ def load_capabilities(path: Path) -> dict[str, SnmpWritePolicy]:
     return {"write_policy": load_write_policy(Path(path))}
 
 
-def require_lab_validated_write(
+def require_snmp_write_allowed(
     path: Path,
     *,
     model: str | None,
