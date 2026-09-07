@@ -1,42 +1,14 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "2.0",
   "write_policy": {
-    "scope": "vendor-neutral SNMPv3 write policy for the OIDs validated by OKAPI",
+    "scope": "vendor-neutral SNMPv3 write policy",
     "security": {
       "auth_protocol": "SHA256",
       "priv_protocol": "AES256"
     },
     "objects": {
-      "IF-MIB::ifAdminStatus": {"write": "LAB_VALIDATED"},
-      "Q-BRIDGE-MIB::dot1qPvid": {"write": "LAB_VALIDATED"}
-    }
-  },
-  "platforms": {
-    "Arista vEOS 4.29.2F": {
-      "scope": "EVE-NG laboratory only",
-      "security": {
-        "auth_protocol": "SHA256",
-        "priv_protocol": "AES256"
-      },
-      "objects": {
-        "SNMPv2-MIB::sysName": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
-        "IF-MIB::ifDescr": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
-        "IF-MIB::ifAdminStatus": {"read": "SUPPORTED", "write": "LAB_VALIDATED"},
-        "BRIDGE-MIB::dot1dBasePortIfIndex": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
-        "Q-BRIDGE-MIB::dot1qTpFdbPort": {"read": "SUPPORTED", "write": "NOT_APPLICABLE"},
-        "Q-BRIDGE-MIB::dot1qPvid": {"read": "SUPPORTED", "write": "LAB_VALIDATED"}
-      }
-    },
-    "UniFi": {
-      "scope": "real equipment",
-      "security": {
-        "auth_protocol": "TO_BE_VALIDATED",
-        "priv_protocol": "TO_BE_VALIDATED"
-      },
-      "objects": {
-        "IF-MIB::ifAdminStatus": {"read": "TO_BE_VALIDATED", "write": "TO_BE_VALIDATED"},
-        "Q-BRIDGE-MIB::dot1qPvid": {"read": "TO_BE_VALIDATED", "write": "TO_BE_VALIDATED"}
-      }
+      "IF-MIB::ifAdminStatus": {"write": "ALLOWED"},
+      "Q-BRIDGE-MIB::dot1qPvid": {"write": "ALLOWED"}
     }
   }
 }
